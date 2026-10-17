@@ -1097,8 +1097,29 @@ class SavedSearch extends SavedQueue {
         return (!$this->__new__);
     }
 
+    // Real total for searches up to 500 tickets; bigger ones keep the
+    // "about 500" estimate so the count stays cheap
     function getCount($agent, $cached=true) {
-        return 500;
+        $query = $this->getQuery();
+        if ($agent)
+            $query = $agent->applyVisibility($query);
+        $query->filter(Q::any([
+                'ticket_pid__isnull' => true,
+                'flags__hasbit' => Ticket::FLAG_LINKED
+            ]))->order_by(false)->offset(false)->limit(501);
+        try {
+            $n = 0;
+            foreach ($query->values_flat('ticket_id')->distinct('ticket_id') as $row)
+                $n++;
+            return min($n, 500);
+        } catch (Exception $e) {
+            return 500;
+        }
+    }
+
+    // Whether getCount() is the exact number of results
+    static function isExactCount($count) {
+        return is_numeric($count) && $count < 500;
     }
 }
 
@@ -2002,4 +2023,56 @@ interface Searchable {
     // Determine if the object supports abritrary form additions, through
     // the "Manage Forms" dialog usually
     static function supportsCustomData();
+}
+
+/**
+ * Search bar of the agent ticket screen: ticket number, subject, text in
+ * the ticket thread and a creation date range. Every filled-in field must
+ * match (AND). Results are shown as an ad-hoc queue, like advanced search.
+ */
+class TicketSearchBar {
+    // "tnum", not "number": tickets.php uses "number" to open a ticket
+    static $fields = array('tnum', 'subject', 'content', 'from', 'to');
+
+    static function getParams($source=null) {
+        $source = $source ?? $_GET;
+        $params = array();
+        foreach (static::$fields as $f)
+            $params[$f] = trim((string) ($source[$f] ?? ''));
+        return $params;
+    }
+
+    static function isDate($d) {
+        $dt = DateTime::createFromFormat('!Y-m-d', $d);
+        return $dt && $dt->format('Y-m-d') === $d;
+    }
+
+    // Criteria for CustomQueue (array of [field, method, value])
+    static function getCriteria($p, &$errors) {
+        if ($p['from'] && !static::isDate($p['from']))
+            $errors['err'] = __('Invalid "from" date');
+        elseif ($p['to'] && !static::isDate($p['to']))
+            $errors['err'] = __('Invalid "to" date');
+        elseif ($p['from'] && $p['to'] && $p['from'] > $p['to'])
+            $errors['err'] = __('The "from" date must be on or before the "to" date');
+        elseif ($p['content'] !== '' && mb_strlen($p['content']) < 3)
+            $errors['err'] = __('Search at least 3 characters of content');
+        if ($errors['err'] ?? null)
+            return null;
+
+        $criteria = array();
+        if ($p['tnum'] !== '')
+            $criteria[] = array('number', 'contains', $p['tnum']);
+        if ($p['subject'] !== '')
+            $criteria[] = array('cdata__subject', 'contains', $p['subject']);
+        if ($p['from'] || $p['to'])
+            // "between" takes whole days in the agent's timezone
+            $criteria[] = array('created', 'between', array(
+                'left' => $p['from'] ?: '1970-01-01',
+                'right' => $p['to'] ?: '2999-12-31',
+            ));
+        if ($p['content'] !== '')
+            $criteria[] = array(':content', null, $p['content']);
+        return $criteria;
+    }
 }

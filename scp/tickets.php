@@ -80,6 +80,16 @@ if (!$ticket) {
         $_SESSION['advsearch']['orgid'] = $criteria;
         $queue_id = "adhoc,orgid";
     }
+    // Search bar: ticket number, subject, content and creation date range
+    elseif (isset($_GET['a']) && $_GET['a'] === 'search'
+        && (($sq = TicketSearchBar::getParams()) && array_filter($sq))
+    ) {
+        if (($criteria = TicketSearchBar::getCriteria($sq, $errors))) {
+            $key = substr(md5(serialize($sq)), -10);
+            $_SESSION['advsearch'][$key] = $criteria;
+            $queue_id = "adhoc,{$key}";
+        }
+    }
     // Basic search (click on 🔍 )
     elseif (isset($_GET['a']) && $_GET['a'] === 'search'
         && ($_GET['query'])

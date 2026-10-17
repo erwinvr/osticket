@@ -122,7 +122,9 @@ if (($Q->extra && isset($Q->extra['tables'])) || !$Q->constraints || $empty) {
 }
 
 $count = $count ?? $queue->getCount($thisstaff);
-$pageNav->setTotal($count, true);
+// Searches count their results exactly (up to 500); queue counts are cached
+$pageNav->setTotal($count, !($queue instanceof SavedSearch
+    && SavedSearch::isExactCount($count)));
 $pageNav->setURL('tickets.php', $args);
 ?>
 
@@ -144,13 +146,27 @@ $pageNav->setURL('tickets.php', $args);
   });
 return false;">
     <input type="hidden" name="a" value="search">
-    <input type="hidden" name="search-type" value=""/>
-    <div class="attached input">
-      <input type="text" class="basic-search" data-url="ajax.php/tickets/lookup" name="query"
-        autofocus size="30" value="<?php echo Format::htmlchars($_REQUEST['query'] ?? null, true); ?>"
-        autocomplete="off" autocorrect="off" autocapitalize="off">
-      <button type="submit" class="attached button"><i class="icon-search"></i>
-      </button>
+<?php
+    // Search bar: number, subject, content and creation date range
+    $sq = (($_GET['a'] ?? '') === 'search') ? TicketSearchBar::getParams() : array();
+    $sv = function($f) use ($sq) { return Format::htmlchars($sq[$f] ?? '', true); }; ?>
+    <div id="ticket-search-bar" style="display:inline-block; vertical-align:middle">
+      <input type="text" name="tnum" size="8" value="<?php echo $sv('tnum'); ?>"
+        placeholder="<?php echo __('Ticket #'); ?>" autocomplete="off">
+      <input type="text" name="subject" size="13" value="<?php echo $sv('subject'); ?>"
+        placeholder="<?php echo __('Subject'); ?>" autocomplete="off">
+      <input type="text" name="content" size="13" value="<?php echo $sv('content'); ?>"
+        placeholder="<?php echo __('Content'); ?>" autocomplete="off">
+      <label class="faded" title="<?php echo __('Create Date'); ?>"><?php echo __('Created'); ?>
+        <input type="date" name="from" value="<?php echo $sv('from'); ?>" title="<?php echo __('From'); ?>">
+        &ndash;
+        <input type="date" name="to" value="<?php echo $sv('to'); ?>" title="<?php echo __('To'); ?>">
+      </label>
+      <button type="submit" class="button" title="<?php echo __('Search'); ?>"><i class="icon-search"></i> <?php echo __('Search'); ?></button>
+<?php if (array_filter($sq)) { ?>
+      <a href="tickets.php?queue=<?php echo (int) ($thisstaff->getDefaultTicketQueueId()
+            ?: $cfg->getDefaultTicketQueueId()); ?>" title="<?php echo __('Clear the search'); ?>"><?php echo __('Clear'); ?></a>&nbsp;&nbsp;
+<?php } ?>
     </div>
     <a href="#" onclick="javascript:
         $.dialog('ajax.php/tickets/search', 201);"

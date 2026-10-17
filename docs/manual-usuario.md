@@ -9,7 +9,7 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 **Para quién es:**
 
 - **Administradores:** configuran vacaciones, equipos y flujos, y revisan la auditoría (secciones 2, 3, 5 a 9, 12 y 13).
-- **Agentes:** consultan su propia vacación, ven qué tickets reciben, los derivan entre etapas y descargan adjuntos (secciones 4, 8, 10, 11, 12 y 14).
+- **Agentes:** consultan su propia vacación, ven qué tickets reciben, los derivan entre etapas, descargan adjuntos y buscan tickets (secciones 4, 8, 10, 11, 12, 14 y 15).
 
 **Cómo entrar:**
 
@@ -34,7 +34,8 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 | Ver o filtrar los tickets por etapa | [12. Ver la etapa en las colas y en la búsqueda](#12-ver-la-etapa-en-las-colas-y-en-la-búsqueda) |
 | Revisar quién hizo qué y cuándo | [13. Auditoría](#13-auditoría) |
 | Bajar de una vez todos los archivos de una respuesta | [14. Descargar todos los adjuntos en un ZIP](#14-descargar-todos-los-adjuntos-en-un-zip) |
-| Entender un mensaje de error | [15. Preguntas frecuentes y solución de problemas](#15-preguntas-frecuentes-y-solución-de-problemas) |
+| Buscar tickets por número, asunto, contenido o fecha | [15. Buscar tickets](#15-buscar-tickets) |
+| Entender un mensaje de error | [16. Preguntas frecuentes y solución de problemas](#16-preguntas-frecuentes-y-solución-de-problemas) |
 
 La pantalla de osTicket está en inglés. Por eso este manual escribe los nombres de botones y campos tal como aparecen, por ejemplo **Vacation Mode**.
 
@@ -76,7 +77,7 @@ Si marca **Vacation Mode** y deja las dos fechas vacías, la vacación empieza a
 - La fecha de fin no puede estar en el pasado.
 - Inicio y fin pueden ser el mismo día, para una vacación de un solo día.
 
-Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 15).
+Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 16).
 
 **Importante:** el cambio de estado lo hace una tarea automática de osTicket que corre cada pocos minutos. Si la vacación no se activa el día indicado, avise al área técnica para que revise el cron.
 
@@ -403,7 +404,7 @@ Con la condición **has a value** la cola muestra todos los tickets que siguen u
 
 ### Buscar tickets por etapa (agentes)
 
-1. En **Tickets**, haga clic en **[advanced]**, junto al buscador.
+1. En **Tickets**, haga clic en **[advanced]**, al final de la barra de búsqueda (vea la sección 15).
 2. Agregue el campo **Stage** y elija las etapas.
 3. Haga clic en **Search**.
 
@@ -473,7 +474,38 @@ Cuando un mensaje, una respuesta o una nota tiene dos o más archivos adjuntos, 
 - Los clientes solo pueden descargar los adjuntos de sus mensajes y de las respuestas que reciben, nunca los de las notas internas.
 - Para bajar el ticket completo (conversación en PDF y todos los adjuntos), los agentes siguen teniendo la exportación ZIP del ticket en el menú de impresión.
 
-## 15. Preguntas frecuentes y solución de problemas
+## 15. Buscar tickets
+
+En la pantalla **Tickets**, la barra de búsqueda permite combinar cuatro filtros: número de ticket, asunto, contenido y rango de fecha de creación. Solo hace falta completar los que necesite; los resultados cumplen todos los que haya completado.
+
+![Barra de búsqueda con asunto «impresora», contenido «XJ-4471» y fecha desde el 01/10/2026; debajo, los tres tickets encontrados](img/buscar-tickets.png)
+
+### Pasos
+
+1. En el panel de agentes, haga clic en **Tickets**.
+2. En la barra de búsqueda, complete uno o varios campos:
+    - **Ticket #**: todo o parte del número, por ejemplo «752».
+    - **Subject**: palabras del asunto.
+    - **Content**: un texto que aparezca en los mensajes, respuestas o notas del ticket (mínimo 3 caracteres).
+    - **Created**: la fecha desde y la fecha hasta. Puede usar solo una de las dos.
+3. Haga clic en **Search**.
+4. Para volver a la cola normal, haga clic en **Clear**.
+
+| Campo | Encuentra | Ejemplo |
+| --- | --- | --- |
+| Ticket # | Tickets cuyo número contiene lo escrito | «752» encuentra 557525 y 752130 |
+| Subject | Tickets cuyo asunto contiene lo escrito | «impresora» encuentra «Problema impresora» |
+| Content | Tickets con ese texto en cualquier mensaje, respuesta o nota, aunque sea parte de una palabra | «presora del pi» encuentra «La impresora del piso 3…» |
+| Created | Tickets creados entre las dos fechas, ambos días incluidos | Del 01/09/2026 al 30/09/2026 |
+
+### Bueno saber
+
+- Los resultados incluyen tickets abiertos y cerrados, de todos los departamentos a los que usted tiene acceso.
+- Los valores buscados quedan en la barra, para afinar la búsqueda sin volver a escribirlos.
+- Debajo de la lista se indica cuántos tickets se encontraron. Si son más de 500, se indica «about 500» y conviene acotar la búsqueda.
+- Para búsquedas más complejas (por agente, estado, etapa, campos personalizados…) sigue disponible **[advanced]**.
+
+## 16. Preguntas frecuentes y solución de problemas
 
 ### Mensajes de error
 
@@ -545,16 +577,17 @@ La nueva etapa pertenece a otro departamento al que usted no tiene acceso. Es lo
 
 El ticket se reabre y sigue en la etapa final, que no tiene derivaciones. Para continuar el recorrido, un administrador debe permitir derivaciones desde una etapa no final, o el ticket se gestiona fuera del flujo si este es libre.
 
-## 16. Historial de este manual
+## 17. Historial de este manual
 
 Este manual se actualiza cada vez que se agrega o cambia una función.
 
 | Fecha | Cambio |
 | --- | --- |
+| 17/10/2026 | Nueva barra de búsqueda de tickets por número, asunto, contenido y fecha de creación (sección 15) |
 | 17/10/2026 | Descarga de todos los adjuntos de una respuesta en un ZIP (sección 14) |
 | 16/10/2026 | Editor gráfico de flujos y SLA por etapa (sección 9), etapa en colas y búsqueda (sección 12) y auditoría (sección 13) |
-| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 15) |
-| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 15) |
+| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 16) |
+| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 16) |
 
 **Estado:** todas las funciones están probadas en el entorno de pruebas. Todas están guardadas en el repositorio, en la rama `feature/mejoras-osticket`. Ninguna está instalada aún en el sistema de producción.
 

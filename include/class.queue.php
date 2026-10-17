@@ -159,6 +159,10 @@ class CustomQueue extends VerySimpleModel {
                 $items[] = Format::htmlchars("\"{$value}\"");
                 continue;
             }
+            if ($path === ':content') {
+                $items[] = Format::htmlchars(sprintf(__('Content contains "%s"'), $value));
+                continue;
+            }
             if (!isset($all[$path]))
                 continue;
             list($label, $field) = $all[$path];
@@ -974,6 +978,20 @@ class CustomQueue extends VerySimpleModel {
             if ($name === ':keywords') {
                 global $ost;
                 $qs = $ost->searcher->find($value, $qs, false, ['boolean' => false]);
+            }
+            // Text anywhere in the messages, responses and notes of the
+            // ticket (substring match, no search index needed)
+            elseif ($name === ':content') {
+                $entries = ThreadEntry::objects()
+                    ->filter(array(
+                        'thread__object_type' => ObjectModel::OBJECT_TYPE_TICKET,
+                        Q::any(array(
+                            'body__contains' => $value,
+                            'title__contains' => $value,
+                        )),
+                    ))
+                    ->values_flat('thread__object_id');
+                $qs = $qs->filter(array('ticket_id__in' => $entries));
             }
             else {
                 $nullable = ($method === 'nset') ? false : null;
