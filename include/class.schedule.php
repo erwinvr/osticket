@@ -99,7 +99,10 @@ class Schedule extends VerySimpleModel {
     function getTimezone() {
         global $cfg;
 
-        return $this->get('timezone') ?: $cfg->getTimezone();
+        // Without its own timezone a schedule follows the helpdesk's, not
+        // the one of whoever happens to trigger the calculation (SLA due
+        // dates would otherwise depend on the agent's timezone)
+        return $this->get('timezone') ?: $cfg->getDefaultTimezone();
     }
 
     function getDatetimeZone() {

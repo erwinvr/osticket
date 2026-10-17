@@ -43,7 +43,17 @@ class Upgrader {
     }
 
     function getCurrentStream() {
-        return $this->streams[$this->current];
+        // Move on to the next pending stream once the current one is done
+        $stream = $this->streams[$this->current] ?? null;
+        if ($stream && $stream->isFinished()) {
+            foreach ($this->streams as $name => $s) {
+                if (!$s->isFinished()) {
+                    $this->current = $name;
+                    return $s;
+                }
+            }
+        }
+        return $stream;
     }
 
     function isUpgradable() {
@@ -216,7 +226,8 @@ class StreamUpgrader extends SetupWizard {
     }
 
     function isUpToDate() {
-        return !strcasecmp($this->signature, $this->target)
+        // After a patch the signature holds only the 8-char short hash
+        return !strncasecmp($this->signature, $this->target, 8)
             && !$this->getPendingTask();
     }
 
