@@ -106,12 +106,25 @@ Después de editar `.env`, ejecutar `docker compose up -d`.
   En desarrollo es esperado y se ignora: `setup/` es parte del código fuente
   (instalador, tests, scripts) y no se debe borrar del repo. En producción sí
   se elimina, ya que `php manage.php deploy` la excluye.
-- **Tablas de los flujos (stream `workflow`):** viven en una línea de
-  actualización propia, separada de la oficial (`core`), declarada en
+- **Tablas propias (streams `workflow` y `audit`):** viven en líneas de
+  actualización propias, separadas de la oficial (`core`), declaradas en
   `include/upgrader/streams/streams.cfg`. En una base existente, después de
   actualizar el código se ejecuta `docker compose exec web php manage.php upgrade`
   (en producción, el asistente del panel). Si se cambia
-  `setup/inc/streams/workflow/install-mysql.sql`, hay que actualizar
-  `include/upgrader/streams/workflow.sig` con su nuevo md5 y agregar un parche
-  `<firma anterior 8>-<firma nueva 8>.patch.sql` en `include/upgrader/streams/workflow/`
-  que termine registrando la nueva firma en `ost_config` (namespace `workflow`).
+  `setup/inc/streams/<stream>/install-mysql.sql`, hay que actualizar
+  `include/upgrader/streams/<stream>.sig` con su nuevo md5 y agregar un parche
+  `<firma anterior 8>-<firma nueva 8>.patch.sql` en `include/upgrader/streams/<stream>/`
+  que termine registrando la nueva firma en `ost_config` (namespace del stream).
+- **Sin APCu en desarrollo:** osTicket guarda en APCu la definición de los
+  modelos y solo la renueva al desplegar, así que en desarrollo ignoraría los
+  cambios de código durante 30 minutos. Por eso la imagen de desarrollo no lo
+  instala. En producción sí se recomienda APCu (se renueva con
+  `php manage.php deploy` y con cada actualización de base de datos).
+- **Correcciones en archivos propios de osTicket** (revisarlas al actualizar
+  osTicket desde la versión oficial):
+  - `include/class.upgrader.php`: con varias líneas de actualización, el
+    actualizador exigía parches pendientes en todas (también en las que están
+    al día) y no pasaba a la siguiente línea dentro de la misma ejecución.
+  - `include/class.schedule.php`: un horario sin zona horaria propia usaba la
+    del agente conectado, así que el vencimiento del SLA dependía de quién
+    hacía la acción. Ahora usa la zona horaria del helpdesk.

@@ -316,8 +316,14 @@ implements TemplateVariable {
                 ->order_by('created')
                 ->limit($limit);
             foreach ($tickets as $ticket) {
-                if ($agent = $ticket->autoAssignTeamMember($team, null, false))
-                    $ticket->onAssign($agent, '', true);
+                if (!($agent = $ticket->autoAssignTeamMember($team, null, false)))
+                    continue;
+                $ticket->onAssign($agent, '', true);
+                if (class_exists('AuditLog'))
+                    AuditLog::log('cron', 'assigned', sprintf(
+                        __('Pending ticket #%1$s of team %2$s assigned to %3$s'),
+                        $ticket->getNumber(), $team->getName(), $agent->getName()),
+                        $team, 'CRON');
             }
         }
     }

@@ -8,8 +8,8 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 
 **Para quién es:**
 
-- **Administradores:** configuran vacaciones, equipos y flujos (secciones 2, 3, 5 a 9).
-- **Agentes:** consultan su propia vacación, ven qué tickets reciben y los derivan entre etapas (secciones 4, 8, 10 y 11).
+- **Administradores:** configuran vacaciones, equipos y flujos, y revisan la auditoría (secciones 2, 3, 5 a 9, 12 y 13).
+- **Agentes:** consultan su propia vacación, ven qué tickets reciben y los derivan entre etapas (secciones 4, 8, 10, 11 y 12).
 
 **Cómo entrar:**
 
@@ -31,7 +31,9 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 | Que los tickets de un tema pasen por etapas definidas | [9. Diseñar un flujo de atención](#9-diseñar-un-flujo-de-atención) |
 | Pasar un ticket a la siguiente etapa | [10. Derivar un ticket a otra etapa](#10-derivar-un-ticket-a-otra-etapa) |
 | Saber qué ve el cliente de su ticket | [11. Qué ve el cliente](#11-qué-ve-el-cliente) |
-| Entender un mensaje de error | [12. Preguntas frecuentes y solución de problemas](#12-preguntas-frecuentes-y-solución-de-problemas) |
+| Ver o filtrar los tickets por etapa | [12. Ver la etapa en las colas y en la búsqueda](#12-ver-la-etapa-en-las-colas-y-en-la-búsqueda) |
+| Revisar quién hizo qué y cuándo | [13. Auditoría](#13-auditoría) |
+| Entender un mensaje de error | [14. Preguntas frecuentes y solución de problemas](#14-preguntas-frecuentes-y-solución-de-problemas) |
 
 La pantalla de osTicket está en inglés. Por eso este manual escribe los nombres de botones y campos tal como aparecen, por ejemplo **Vacation Mode**.
 
@@ -73,7 +75,7 @@ Si marca **Vacation Mode** y deja las dos fechas vacías, la vacación empieza a
 - La fecha de fin no puede estar en el pasado.
 - Inicio y fin pueden ser el mismo día, para una vacación de un solo día.
 
-Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 12).
+Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 14).
 
 **Importante:** el cambio de estado lo hace una tarea automática de osTicket que corre cada pocos minutos. Si la vacación no se activa el día indicado, avise al área técnica para que revise el cron.
 
@@ -273,14 +275,26 @@ Cada caja es una etapa con su departamento y su equipo; cada flecha, una derivac
 9. Para agregar otra etapa, haga clic en **Add stage**. Ordénelas con las flechas ↑↓ y borre las que sobren con la papelera.
 10. Haga clic en **Create Workflow**.
 
+En la columna **SLA** puede elegir un plan de SLA para la etapa (opcional; vea «SLA por etapa» más abajo).
+
+![Tabla Stages de un flujo con cuatro etapas: nombre, departamento, equipo, SLA, inicial y final](img/etapas-flujo.png)
+
+El candado de la última columna indica que la etapa tiene tickets y no se puede quitar.
+
 ### Paso 2: definir las derivaciones permitidas
 
-1. Vuelva a abrir el flujo desde **Admin Panel → Manage → Workflows**.
-2. Baje hasta **Allowed derivations**. Hay una fila por etapa.
-3. En cada fila, marque las etapas a las que se puede derivar desde esa etapa. Para permitir devolver un ticket, marque también la etapa anterior.
-4. Haga clic en **Save Changes**.
+Las derivaciones se definen en el diagrama del flujo, arrastrando con el ratón.
 
-Las etapas nuevas aparecen en esta sección después de guardarlas. Las etapas finales no tienen derivaciones, porque en ellas el ticket se cierra.
+1. Vuelva a abrir el flujo desde **Admin Panel → Manage → Workflows**.
+2. Baje hasta **Workflow diagram**. Cada caja es una etapa: azul la inicial, verde las finales.
+3. Para ordenar el dibujo, arrastre las cajas a donde quiera. Si suelta una caja encima de otra, vuelve a su lugar.
+4. Para permitir una derivación, haga clic en el punto azul del borde derecho de la etapa de origen y, sin soltar, arrastre hasta la etapa de destino. Aparece una flecha.
+5. Para quitar una derivación, haga clic en su flecha (se pone roja al pasar el ratón) y confirme.
+6. Haga clic en **Save Changes**. Ni las flechas ni las posiciones se guardan hasta este paso.
+
+![Diagrama del flujo Soporte técnico: Recepción deriva a Técnico o Facturación, ambas derivan a Cierre y Técnico puede devolver a Recepción](img/editor-flujo.png)
+
+Debajo del diagrama, la sección **Allowed derivations** muestra las mismas derivaciones como casillas; puede usar cualquiera de las dos, porque siempre están sincronizadas. Las etapas nuevas aparecen en el diagrama después de guardarlas. Las etapas finales no tienen punto azul, porque en ellas el ticket se cierra.
 
 ### Transferencias libres o fijas
 
@@ -290,6 +304,17 @@ Las etapas nuevas aparecen en esta sección después de guardarlas. Las etapas f
 | **Fixed** | Solo derivar entre etapas. El botón **Transfer** no aparece y no se puede asignar el ticket a un equipo distinto del de su etapa | El recorrido debe cumplirse siempre |
 
 En los dos modos se puede reasignar el ticket a otro agente dentro de la etapa.
+
+### SLA por etapa
+
+Cada etapa puede tener su propio SLA. El plazo empieza a contar **cuando el ticket entra en la etapa**, no cuando se creó el ticket.
+
+| Al entrar a… | SLA del ticket | Desde cuándo cuenta |
+| --- | --- | --- |
+| Una etapa con SLA | El de la etapa | Desde que entró a la etapa |
+| Una etapa sin SLA | El habitual del ticket: el del departamento, si no el del tema de ayuda, si no el SLA por defecto | Desde la creación del ticket, como siempre en osTicket |
+
+Al derivar, osTicket recalcula el vencimiento y quita la marca de vencido si la tenía. El SLA cuenta en el horario del departamento: un SLA de 4 horas con horario de oficina puede vencer al día hábil siguiente.
 
 ### Reglas
 
@@ -346,7 +371,87 @@ El cliente ve en el portal en qué etapa está su ticket, con el nombre de la et
 
 El cliente no ve el historial de etapas, los comentarios de derivación (son notas internas) ni los agentes involucrados. Los tickets que no siguen un flujo no muestran la línea **Stage**.
 
-## 12. Preguntas frecuentes y solución de problemas
+## 12. Ver la etapa en las colas y en la búsqueda
+
+La etapa del ticket está disponible como el campo **Stage** en todos los lugares donde osTicket deja elegir campos: columnas de las colas, filtros de las colas, orden y búsqueda avanzada. Se muestra como «Flujo / Etapa», por ejemplo «Soporte técnico / Recepción».
+
+![Cola «Recepción» con la columna Stage: todos los tickets en Soporte técnico / Recepción](img/cola-etapa.png)
+
+### Agregar la columna Stage a una cola
+
+**Quién puede hacerlo:** un administrador (para las colas de todos).
+
+1. Entre al **Admin Panel**.
+2. Vaya a **Settings → Tickets** y abra la pestaña **Queues**.
+3. Haga clic en la cola, por ejemplo **Open**.
+4. Abra la pestaña **Columns**.
+5. En **— Add a column —**, elija **— Add New —**.
+6. En la ventana **Add Queue Column**, escriba el nombre de la columna (por ejemplo «Etapa») y en **Primary Data Source** elija **Stage**. Haga clic en **Save**.
+7. Haga clic en **Save Changes**.
+
+La próxima vez, la columna ya creada aparece directamente en la lista **— Add a column —** de cualquier cola.
+
+### Crear una cola por etapa
+
+1. En **Admin Panel → Settings → Tickets → Queues**, haga clic en **Add New Queue**.
+2. Escriba el nombre, por ejemplo «En revisión técnica».
+3. En la pestaña **Criteria**, agregue el campo **Stage**, deje la condición **includes** y marque las etapas que quiere ver.
+4. Haga clic en **Save Changes**.
+
+Con la condición **has a value** la cola muestra todos los tickets que siguen un flujo; con **does not have a value**, los que no siguen ninguno. Con **does not include** puede excluir etapas.
+
+### Buscar tickets por etapa (agentes)
+
+1. En **Tickets**, haga clic en **[advanced]**, junto al buscador.
+2. Agregue el campo **Stage** y elija las etapas.
+3. Haga clic en **Search**.
+
+Un agente también puede guardar la búsqueda como cola personal con **Add personal queue**, en el menú de **Tickets**.
+
+## 13. Auditoría
+
+La auditoría reúne en una sola lista todo lo que pasa en el helpdesk: quién hizo qué, cuándo y desde qué dirección IP. La lista va de lo más reciente a lo más antiguo.
+
+**Quién puede verla:** solo los administradores. Para el resto de los agentes la opción no aparece.
+
+### Cómo entrar
+
+1. En el panel de agentes, haga clic en **Dashboard**.
+2. En el submenú, haga clic en **Audit**.
+
+![Pantalla Audit con filtros y la lista de eventos: logins, cambios de configuración, acciones del cron, eventos de tickets y cambios de etapa](img/auditoria.png)
+
+### Qué registra
+
+| Categoría | Qué incluye |
+| --- | --- |
+| **Ticket events** | Creación, asignación, transferencia, cierre, reapertura, edición y vencimiento de tickets y tareas |
+| **Messages and notes** | Mensajes del cliente, respuestas de agentes y notas internas, con el comienzo del texto |
+| **Stage changes** | Entrada de cada ticket a su flujo y cada derivación, con quién la hizo y su comentario |
+| **Logins** | Inicios y cierres de sesión de agentes y clientes, e intentos fallidos con el usuario usado |
+| **Configuration changes** | Cambios en agentes, equipos, departamentos, temas de ayuda, flujos y ajustes del sistema, con el dato que cambió |
+| **Cron actions** | Cada ejecución del cron programado, vacaciones que empiezan o terminan y tickets pendientes repartidos |
+| **System log** | El registro de sistema de osTicket: errores, advertencias y mensajes técnicos |
+
+### Filtrar y buscar
+
+1. Al abrir la pantalla se muestran los últimos 7 días. Cámbielo en **From** y **To**.
+2. Opcional: elija una categoría, un agente, escriba un número de ticket o un texto para buscar.
+3. Haga clic en **Filter**. **Reset** vuelve a los valores iniciales.
+
+En la columna **Reference**, los números de ticket son enlaces: un clic abre el ticket.
+
+### Exportar
+
+Haga clic en **Export CSV** para descargar los eventos filtrados (hasta 10.000) en un archivo que se abre con Excel.
+
+### Bueno saber
+
+- El filtro por agente y el número de ticket no se aplican al **System log**, que no guarda esos datos.
+- Los eventos de tickets, mensajes y cambios de etapa se muestran desde siempre. Los logins, cambios de configuración y acciones del cron se registran desde que se instaló esta función.
+- Las acciones que el sistema hace solo figuran con el actor **SYSTEM**, **CRON** o **Team Auto Assignment**.
+
+## 14. Preguntas frecuentes y solución de problemas
 
 ### Mensajes de error
 
@@ -418,15 +523,16 @@ La nueva etapa pertenece a otro departamento al que usted no tiene acceso. Es lo
 
 El ticket se reabre y sigue en la etapa final, que no tiene derivaciones. Para continuar el recorrido, un administrador debe permitir derivaciones desde una etapa no final, o el ticket se gestiona fuera del flujo si este es libre.
 
-## 13. Historial de este manual
+## 15. Historial de este manual
 
 Este manual se actualiza cada vez que se agrega o cambia una función.
 
 | Fecha | Cambio |
 | --- | --- |
-| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (sección 12) |
-| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 12) |
+| 16/10/2026 | Editor gráfico de flujos y SLA por etapa (sección 9), etapa en colas y búsqueda (sección 12) y auditoría (sección 13) |
+| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 14) |
+| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 14) |
 
 **Estado:** todas las funciones están probadas en el entorno de pruebas. Todas están guardadas en el repositorio, en la rama `feature/mejoras-osticket`. Ninguna está instalada aún en el sistema de producción.
 
-**Al instalar los flujos en producción:** osTicket mostrará que hay una actualización de base de datos pendiente. Un administrador debe completarla desde el panel (o el área técnica con `php manage.php upgrade`) antes de seguir usando el sistema.
+**Al instalar los flujos y la auditoría en producción:** osTicket mostrará que hay una actualización de base de datos pendiente. Un administrador debe completarla desde el panel (o el área técnica con `php manage.php upgrade`) antes de seguir usando el sistema.

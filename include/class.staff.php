@@ -741,6 +741,12 @@ implements AuthenticatedUser, EmailContact, TemplateVariable, Searchable {
         foreach ($agents as $agent) {
             if (!$agent->syncVacation($today) || !$agent->save())
                 continue;
+            if (class_exists('AuditLog'))
+                AuditLog::log('cron', $agent->onvacation ? 'vacation on' : 'vacation off',
+                    sprintf($agent->onvacation
+                        ? __('Scheduled vacation started for %s')
+                        : __('Scheduled vacation ended for %s'), $agent->getName()),
+                    $agent, 'CRON');
             if ($ost)
                 $ost->logDebug(_S('Vacation Mode'), sprintf(
                     $agent->onvacation

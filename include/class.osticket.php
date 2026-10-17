@@ -685,6 +685,13 @@ class osTicket {
         if (!$ost->isUpgradePending())
             $ost->plugins->bootstrap();
 
+        // Audit trail (Dashboard > Audit): logins, config changes, cron
+        if (!$ost->isUpgradePending()) {
+            require_once INCLUDE_DIR.'class.workflow.php';
+            require_once INCLUDE_DIR.'class.audit.php';
+            AuditLog::bootstrap();
+        }
+
         // Mirror content updates to the search backend
         $ost->searcher = new SearchInterface();
 

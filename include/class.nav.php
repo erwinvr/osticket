@@ -161,6 +161,8 @@ class StaffNav {
                     $subnav[]=array('desc'=>__('Dashboard'),'href'=>'dashboard.php','iconclass'=>'logs');
                     $subnav[]=array('desc'=>__('Agent Directory'),'href'=>'directory.php','iconclass'=>'teams');
                     $subnav[]=array('desc'=>__('My Profile'),'href'=>'profile.php','iconclass'=>'users');
+                    if ($staff && $staff->isAdmin())
+                        $subnav[]=array('desc'=>__('Audit'),'href'=>'audit.php','iconclass'=>'lists');
                     break;
                 case 'users':
                     $subnav[] = array('desc' => __('User Directory'), 'href' => 'users.php', 'iconclass' => 'teams');

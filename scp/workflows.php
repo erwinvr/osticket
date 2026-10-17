@@ -19,6 +19,7 @@ if ($_POST) {
             $errors['err'] = sprintf(__('%s: Unknown or invalid'), __('workflow'));
         } elseif ($workflow->update($_POST, $errors)) {
             $msg = sprintf(__('Successfully updated %s.'), __('this workflow'));
+            AuditLog::log('config', 'edited', __('Workflow updated'), $workflow);
         } elseif (!$errors['err']) {
             $errors['err'] = sprintf('%s %s',
                 sprintf(__('Unable to update %s.'), __('this workflow')),
@@ -30,6 +31,7 @@ if ($_POST) {
         if ($workflow->update($_POST, $errors)) {
             $msg = sprintf(__('Successfully added %s.'),
                 Format::htmlchars($workflow->getName()));
+            AuditLog::log('config', 'created', __('Workflow created'), $workflow);
             $_REQUEST['a'] = null;
         } else {
             if (!$errors['err'])
@@ -45,7 +47,8 @@ if ($_POST) {
             $errors['err'] = sprintf(__('%s: Unknown or invalid'), __('workflow'));
         } elseif ($workflow->getNumTickets()) {
             $errors['err'] = __('This workflow has tickets and cannot be deleted. Deactivate it instead.');
-        } elseif ($workflow->delete()) {
+        } elseif (($name = $workflow->getName()) && $workflow->delete()) {
+            AuditLog::log('config', 'deleted', sprintf(__('Workflow "%s" deleted'), $name));
             $msg = sprintf(__('Successfully deleted %s.'), __('this workflow'));
             $workflow = null;
         } else {
