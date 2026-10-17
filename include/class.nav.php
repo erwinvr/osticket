@@ -139,6 +139,7 @@ class StaffNav {
             $this->tabs['tickets'] = array('desc'=>__('Tickets'),'href'=>'tickets.php','title'=>__('Ticket Queue'));
 
             $this->tabs['kbase'] = array('desc'=>__('Knowledgebase'),'href'=>'kb.php','title'=>__('Knowledgebase'));
+            $this->tabs['reports'] = array('desc'=>__('Reports'),'href'=>'reports.php','title'=>__('Reports'));
             if (!is_null($this->getRegisteredApps()))
                 $this->tabs['apps']=array('desc'=>__('Applications'),'href'=>'apps.php','title'=>__('Applications'));
         }
@@ -156,6 +157,11 @@ class StaffNav {
             switch(strtolower($k)){
                 case 'tasks':
                     $subnav[]=array('desc'=>__('Tasks'), 'href'=>'tasks.php', 'iconclass'=>'Ticket', 'droponly'=>true);
+                    break;
+                case 'reports':
+                    require_once INCLUDE_DIR.'class.reports.php';
+                    foreach (TicketReports::getReports() as $r => $label)
+                        $subnav[]=array('desc'=>$label,'href'=>'reports.php?r='.$r,'iconclass'=>'logs');
                     break;
                 case 'dashboard':
                     $subnav[]=array('desc'=>__('Dashboard'),'href'=>'dashboard.php','iconclass'=>'logs');

@@ -9,7 +9,7 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 **Para quién es:**
 
 - **Administradores:** configuran vacaciones, equipos y flujos, y revisan la auditoría (secciones 2, 3, 5 a 9, 12 y 13).
-- **Agentes:** consultan su propia vacación, ven qué tickets reciben, los derivan entre etapas, descargan adjuntos y buscan tickets (secciones 4, 8, 10, 11, 12, 14 y 15).
+- **Agentes:** consultan su propia vacación, ven qué tickets reciben, los derivan entre etapas, descargan adjuntos, buscan tickets y generan reportes (secciones 4, 8, 10, 11, 12, 14, 15 y 17).
 
 **Cómo entrar:**
 
@@ -36,7 +36,8 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 | Bajar de una vez todos los archivos de una respuesta | [14. Descargar todos los adjuntos en un ZIP](#14-descargar-todos-los-adjuntos-en-un-zip) |
 | Buscar tickets por número, asunto, contenido o fecha | [15. Buscar tickets](#15-buscar-tickets) |
 | Ver cuántos casos hay por tema y etapa, y cuántos vencieron el SLA | [16. Dashboard del portal](#16-dashboard-del-portal) |
-| Entender un mensaje de error | [17. Preguntas frecuentes y solución de problemas](#17-preguntas-frecuentes-y-solución-de-problemas) |
+| Saber qué agente, tema de ayuda o etapa demora más, y exportarlo | [17. Reportes](#17-reportes) |
+| Entender un mensaje de error | [18. Preguntas frecuentes y solución de problemas](#18-preguntas-frecuentes-y-solución-de-problemas) |
 
 La pantalla de osTicket está en inglés. Por eso este manual escribe los nombres de botones y campos tal como aparecen, por ejemplo **Vacation Mode**.
 
@@ -78,7 +79,7 @@ Si marca **Vacation Mode** y deja las dos fechas vacías, la vacación empieza a
 - La fecha de fin no puede estar en el pasado.
 - Inicio y fin pueden ser el mismo día, para una vacación de un solo día.
 
-Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 17).
+Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 18).
 
 **Importante:** el cambio de estado lo hace una tarea automática de osTicket que corre cada pocos minutos. Si la vacación no se activa el día indicado, avise al área técnica para que revise el cron.
 
@@ -536,7 +537,54 @@ La pantalla recuerda la frecuencia elegida en ese navegador. Junto a los botones
 - «Past SLA» usa la fecha de vencimiento del ticket: la fijada a mano si la hay, o la del SLA (por etapa, si la etapa tiene uno; vea la sección 9).
 - La actualización automática solo recarga los números, no toda la página.
 
-## 17. Preguntas frecuentes y solución de problemas
+## 17. Reportes
+
+La pestaña **Reports** del panel de agentes analiza los tiempos de atención: qué agente demora más, qué temas de ayuda tardan más y en qué etapa del flujo se quedan los tickets. Todos los reportes se pueden exportar a CSV para trabajarlos en Excel.
+
+**Quién puede verlos:** todos los agentes. Los administradores ven todos los tickets; los demás, solo los de los departamentos a los que tienen acceso y los que tienen asignados.
+
+![Reporte Agents: Luis Ruiz con 30 horas de resolución promedio y María Gómez con 7, con barras comparativas](img/reporte-agentes.png)
+
+### Pasos
+
+1. En el panel de agentes, haga clic en la pestaña **Reports**.
+2. Elija el reporte en el submenú o en las pestañas: **Summary**, **Agents**, **Help Topics**, **Stages** o **Tickets**.
+3. Ajuste los filtros: rango de fechas de creación (por defecto, los últimos 30 días), departamento y tema de ayuda.
+4. Haga clic en **Generate**.
+5. Para bajar el reporte, haga clic en **Export CSV**.
+
+### Qué muestra cada reporte
+
+| Reporte | Responde | Contenido |
+| --- | --- | --- |
+| **Summary** | ¿Cómo vamos en general? | Tickets creados, cerrados y abiertos; tiempo medio de resolución y de primera respuesta; antigüedad de lo abierto; cantidad y % que venció el SLA |
+| **Agents** | ¿Qué agente demora más? | Por agente: tickets, cerrados, abiertos, resolución media y máxima, primera respuesta, antigüedad de lo abierto y vencidos. Ordenado del más lento al más rápido |
+| **Help Topics** | ¿Qué temas tardan más? | Las mismas métricas por tema de ayuda, del más lento al más rápido |
+| **Stages** | ¿En qué etapa se quedan? | Por etapa: tickets, veces que se entró, tiempo medio y máximo en la etapa y cuántos están ahí ahora. Debajo, una tabla **tema × etapa** con el tiempo medio |
+| **Tickets** | Detalle para cualquier otro análisis | Un renglón por ticket: tema, departamento, agente, etapa, estado, fechas, primera respuesta, resolución y si venció el SLA (hasta 5.000) |
+
+![Reporte Stages: tiempo medio por etapa y tabla tema × etapa, con la celda más oscura en Report a Problem / Técnico](img/reporte-etapas.png)
+
+En la tabla tema × etapa, cuanto más oscura la celda, más tiempo pasan los tickets de ese tema en esa etapa: ahí está el cuello de botella.
+
+### Cómo se miden los tiempos
+
+| Medida | Desde | Hasta |
+| --- | --- | --- |
+| Resolución | Creación del ticket | Cierre (solo tickets cerrados) |
+| Primera respuesta | Creación del ticket | Primera respuesta de un agente |
+| Antigüedad de lo abierto | Creación del ticket | Ahora (solo tickets abiertos) |
+| Tiempo en etapa | Entrada a la etapa | Siguiente derivación, cierre o ahora |
+
+### Bueno saber
+
+- Los tiempos son en horas de reloj, no hábiles. Se muestran en minutos, horas (h) o días (d); el CSV trae siempre horas con decimales.
+- En **Agents**, cada ticket cuenta para el agente asignado hoy; en los cerrados, el que lo cerró.
+- Un ticket que sigue abierto en una etapa suma su tiempo hasta ahora, así que puede subir mucho el promedio de esa etapa. La columna **Open now in stage** indica cuántos hay.
+- Un ticket venció el SLA si se cerró después de su fecha de vencimiento, o si sigue abierto y ya la pasó.
+- El CSV incluye los acentos correctamente al abrirlo con Excel.
+
+## 18. Preguntas frecuentes y solución de problemas
 
 ### Mensajes de error
 
@@ -608,18 +656,19 @@ La nueva etapa pertenece a otro departamento al que usted no tiene acceso. Es lo
 
 El ticket se reabre y sigue en la etapa final, que no tiene derivaciones. Para continuar el recorrido, un administrador debe permitir derivaciones desde una etapa no final, o el ticket se gestiona fuera del flujo si este es libre.
 
-## 18. Historial de este manual
+## 19. Historial de este manual
 
 Este manual se actualiza cada vez que se agrega o cambia una función.
 
 | Fecha | Cambio |
 | --- | --- |
+| 17/10/2026 | Reportes de tiempos por agente, tema de ayuda y etapa, con exportación a CSV (sección 17) |
 | 17/10/2026 | Dashboard del portal con casos por tema y etapa, vencimientos de SLA por etapa y actualización automática (sección 16) |
 | 17/10/2026 | Nueva barra de búsqueda de tickets por número, asunto, contenido y fecha de creación (sección 15) |
 | 17/10/2026 | Descarga de todos los adjuntos de una respuesta en un ZIP (sección 14) |
 | 16/10/2026 | Editor gráfico de flujos y SLA por etapa (sección 9), etapa en colas y búsqueda (sección 12) y auditoría (sección 13) |
-| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 17) |
-| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 17) |
+| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 18) |
+| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 18) |
 
 **Estado:** todas las funciones están probadas en el entorno de pruebas. Todas están guardadas en el repositorio, en la rama `feature/mejoras-osticket`. Ninguna está instalada aún en el sistema de producción.
 
