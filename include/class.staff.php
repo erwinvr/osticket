@@ -660,6 +660,129 @@ implements AuthenticatedUser, EmailContact, TemplateVariable, Searchable {
         return ($this->isActive() && !$this->onVacation());
     }
 
+    /* Scheduled vacation mode
+     *
+     * Optional start/end dates (Y-m-d, inclusive, in the helpdesk timezone)
+     * kept in the `extra` attributes. When a schedule is set, the
+     * `onvacation` flag is derived from it (see ::syncVacation) so the
+     * rest of the system keeps relying on `onvacation` alone.
+     */
+    function getVacationStart() {
+        return $this->getExtraAttr('vacation_start') ?: null;
+    }
+
+    function getVacationEnd() {
+        return $this->getExtraAttr('vacation_end') ?: null;
+    }
+
+    function hasVacationSchedule() {
+        return $this->getVacationStart() || $this->getVacationEnd();
+    }
+
+    static function getVacationToday() {
+        global $cfg;
+
+        try {
+            $tz = new DateTimeZone($cfg->getDefaultTimezone() ?: 'UTC');
+        } catch (Exception $e) {
+            $tz = new DateTimeZone('UTC');
+        }
+        $now = new DateTime('now', $tz);
+        return $now->format('Y-m-d');
+    }
+
+    static function isValidVacationDate($date) {
+        $d = DateTime::createFromFormat('!Y-m-d', $date);
+        return $d && $d->format('Y-m-d') === $date;
+    }
+
+    static function formatVacationDate($date) {
+        $d = new DateTime($date, new DateTimeZone('UTC'));
+        return Format::date($d->getTimestamp(), false, false, 'UTC');
+    }
+
+    // Vacation period has ended -- nothing left to activate
+    function isVacationScheduleOver($today=null) {
+        $end = $this->getVacationEnd();
+        return $end && $end < ($today ?: self::getVacationToday());
+    }
+
+    function isVacationScheduledFor($today=null) {
+        $today = $today ?: self::getVacationToday();
+        $start = $this->getVacationStart();
+        $end = $this->getVacationEnd();
+        return (!$start || $start <= $today) && (!$end || $today <= $end);
+    }
+
+    /**
+     * Updates `onvacation` from the schedule, if any. Returns TRUE if the
+     * flag changed (the caller is responsible for saving).
+     */
+    function syncVacation($today=null) {
+        if (!$this->hasVacationSchedule())
+            return false;
+
+        $onvacation = $this->isVacationScheduledFor($today) ? 1 : 0;
+        if ($onvacation == $this->onvacation)
+            return false;
+
+        $this->onvacation = $onvacation;
+        return true;
+    }
+
+    // Called from cron to start and end scheduled vacations
+    static function syncVacations() {
+        global $ost;
+
+        $today = self::getVacationToday();
+        $agents = static::objects()->filter(array(
+            'extra__contains' => '"vacation_',
+        ));
+        foreach ($agents as $agent) {
+            if (!$agent->syncVacation($today) || !$agent->save())
+                continue;
+            if ($ost)
+                $ost->logDebug(_S('Vacation Mode'), sprintf(
+                    $agent->onvacation
+                        ? _S('Scheduled vacation started for %s')
+                        : _S('Scheduled vacation ended for %s'),
+                    $agent->getUserName()));
+        }
+    }
+
+    // Validates and applies the vacation fields posted from a form
+    function updateVacation($vars, &$errors) {
+        $onvacation = isset($vars['onvacation']);
+        $start = $onvacation ? trim($vars['vacation_start'] ?? '') : '';
+        $end = $onvacation ? trim($vars['vacation_end'] ?? '') : '';
+
+        // A schedule needs both dates, so it always has an end
+        if (!$start && $end)
+            $errors['vacation_start'] = __('Start date is required when an end date is set');
+        elseif ($start && !$end)
+            $errors['vacation_end'] = __('End date is required when a start date is set');
+        elseif ($start && $end) {
+            if (!self::isValidVacationDate($start))
+                $errors['vacation_start'] = __('Valid date required');
+            if (!self::isValidVacationDate($end))
+                $errors['vacation_end'] = __('Valid date required');
+            elseif ($end < $start)
+                $errors['vacation_end'] = __('End date must be on or after the start date');
+            elseif ($end < self::getVacationToday()
+                    && $end != $this->getVacationEnd())
+                $errors['vacation_end'] = __('End date cannot be in the past');
+        }
+
+        if (isset($errors['vacation_start']) || isset($errors['vacation_end']))
+            return false;
+
+        $this->setExtraAttr('vacation_start', $start ?: null, false);
+        $this->setExtraAttr('vacation_end', $end ?: null, false);
+        $this->onvacation = $onvacation ? 1 : 0;
+        $this->syncVacation();
+        return true;
+    }
+
     function showAssignedOnly() {
         return $this->assigned_only;
     }
@@ -875,7 +998,9 @@ implements AuthenticatedUser, EmailContact, TemplateVariable, Searchable {
         $this->default_signature_type = $vars['default_signature_type'];
         $this->default_paper_size = $vars['default_paper_size'];
         $this->lang = $vars['lang'];
-        $this->onvacation = $vars['onvacation'];
+        // A vacation schedule set by an administrator takes precedence
+        if (!$this->hasVacationSchedule())
+            $this->onvacation = $vars['onvacation'];
 
         if (isset($vars['avatar_code']))
           $this->setExtraAttr('avatar', $vars['avatar_code']);
@@ -1280,13 +1405,14 @@ implements AuthenticatedUser, EmailContact, TemplateVariable, Searchable {
         $vars['isadmin'] = isset($vars['isadmin']) ? 1 : 0;
         $vars['islocked'] = isset($vars['islocked']) ? 0 : 1;
         $vars['isvisible'] = isset($vars['isvisible']) ? 1 : 0;
-        $vars['onvacation'] = isset($vars['onvacation']) ? 1 : 0;
         $vars['assigned_only'] = isset($vars['assigned_only']) ? 1 : 0;
+
+        // Vacation mode, optionally limited to a date range
+        $this->updateVacation($vars, $errors);
 
         $this->isadmin = $vars['isadmin'];
         $this->isactive = $vars['islocked'];
         $this->isvisible = $vars['isvisible'];
-        $this->onvacation = $vars['onvacation'];
         $this->assigned_only = $vars['assigned_only'];
         $this->role_id = $vars['role_id'];
         $this->username = $vars['username'];

@@ -52,6 +52,7 @@ session_write_close();
 
 // Age tickets: We're going to age tickets regardless of cron settings.
 Cron::TicketMonitor();
+Cron::VacationMonitor();
 
 // Run file purging about every 20 cron runs (1h40 on a five minute cron)
 if (mt_rand(1, 20) == 4)

@@ -175,11 +175,32 @@ if (($bks=Staff2FABackend::allRegistered())) {
         </tr>
         <tr>
           <td colspan="2">
+<?php
+            // Schedules are managed by administrators (Admin Panel > Agents)
+            $vacationScheduled = $staff->hasVacationSchedule()
+                && !$staff->isVacationScheduleOver(); ?>
             <label class="checkbox">
             <input type="checkbox" name="onvacation"
-              <?php echo ($staff->onvacation) ? 'checked="checked"' : ''; ?> />
+              <?php echo ($staff->onvacation) ? 'checked="checked"' : ''; ?>
+              <?php echo $vacationScheduled ? 'disabled="disabled"' : ''; ?> />
               <?php echo __('Vacation Mode'); ?>
             </label>
+<?php
+            if ($vacationScheduled) {
+                $from = $staff->getVacationStart();
+                $to = $staff->getVacationEnd(); ?>
+            <div class="faded" style="margin-left:22px"><em><?php
+                if ($from && $to)
+                    echo sprintf(__('Scheduled by an administrator from %1$s to %2$s'),
+                        Staff::formatVacationDate($from), Staff::formatVacationDate($to));
+                elseif ($from)
+                    echo sprintf(__('Scheduled by an administrator starting %s'),
+                        Staff::formatVacationDate($from));
+                else
+                    echo sprintf(__('Scheduled by an administrator until %s'),
+                        Staff::formatVacationDate($to));
+            ?></em></div>
+<?php       } ?>
             <br/>
         </tr>
       </tbody>

@@ -203,7 +203,12 @@ $agents->limit($pageNav->getLimit())->offset($pageNav->getStart());
                 Format::htmlchars((string) $agent->getName()); ?></a></td>
                 <td><?php echo $agent->getUserName(); ?></td>
                 <td><?php echo $agent->isActive() ? __('Active') :'<b>'.__('Locked').'</b>'; ?><?php
-                    echo $agent->onvacation ? ' <small>(<i>'.__('vacation').'</i>)</small>' : ''; ?></td>
+                    if ($agent->onvacation)
+                        echo ' <small>(<i>'.__('vacation').'</i>)</small>';
+                    elseif ($agent->getVacationStart() && !$agent->isVacationScheduleOver())
+                        echo ' <small>(<i>'.sprintf(__('vacation from %s'),
+                            Staff::formatVacationDate($agent->getVacationStart())).'</i>)</small>';
+                    ?></td>
 
                 <td><a href="departments.php?id=<?php echo
                     $agent->getDeptId(); ?>"><?php

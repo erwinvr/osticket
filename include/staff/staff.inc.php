@@ -217,11 +217,72 @@ if ($bks=Staff2FABackend::allRegistered() && $current = $staff->get2FABackend())
               <?php echo ($staff->assigned_only) ? 'checked="checked"' : ''; ?> />
               <?php echo __('Limit ticket access to ONLY assigned tickets'); ?>
             </label>
+<?php
+            // A finished schedule is shown as off so it can be set again
+            $vacationOver = $staff->isVacationScheduleOver();
+            $vacationStart = $vacationOver ? '' : $staff->getVacationStart();
+            $vacationEnd = $vacationOver ? '' : $staff->getVacationEnd();
+            // Redisplay the submitted values if the form has errors
+            $vacationPosted = $_POST && $errors;
+            $vacationOn = $vacationPosted
+                ? isset($_POST['onvacation'])
+                : ($staff->onvacation || $vacationStart || $vacationEnd);
+            if ($vacationPosted) {
+                $vacationStart = $_POST['vacation_start'] ?? '';
+                $vacationEnd = $_POST['vacation_end'] ?? '';
+            } ?>
             <label class="checkbox">
-            <input type="checkbox" name="onvacation"
-              <?php echo ($staff->onvacation) ? 'checked="checked"' : ''; ?> />
+            <input type="checkbox" name="onvacation" id="onvacation"
+              <?php echo $vacationOn ? 'checked="checked"' : ''; ?> />
               <?php echo __('Vacation Mode'); ?>
             </label>
+            <div id="vacation-schedule" style="margin:4px 0 0 22px">
+              <label><?php echo __('From'); ?>:
+                <input type="date" name="vacation_start"
+                  value="<?php echo Format::htmlchars($vacationStart); ?>" />
+              </label>
+              &nbsp;
+              <label><?php echo __('To'); ?>:
+                <input type="date" name="vacation_end"
+                  value="<?php echo Format::htmlchars($vacationEnd); ?>" />
+              </label>
+              <span class="error">&nbsp;<?php
+                echo $errors['vacation_start'] ?: $errors['vacation_end']; ?></span>
+              <div class="faded"><em><?php echo __(
+                'Optional. Set both dates to limit vacation mode to that period (inclusive). Without dates, it stays active until turned off.'
+              ); ?></em></div>
+<?php
+            if (!$vacationPosted && $staff->hasVacationSchedule() && !$vacationOver) { ?>
+              <div><strong><?php
+                if ($staff->onVacation())
+                    echo $staff->getVacationEnd()
+                        ? sprintf(__('On vacation until %s'),
+                            Staff::formatVacationDate($staff->getVacationEnd()))
+                        : __('On vacation');
+                else
+                    echo sprintf(__('Vacation scheduled to start on %s'),
+                        Staff::formatVacationDate($staff->getVacationStart()));
+              ?></strong></div>
+<?php       } ?>
+            </div>
+            <script type="text/javascript">
+            $(function() {
+                var toggle = function() {
+                    $('#vacation-schedule input').prop('disabled',
+                        !$('#onvacation').is(':checked'));
+                };
+                // Both dates are required once either one is set
+                var $dates = $('#vacation-schedule input[type=date]');
+                var requireBoth = function() {
+                    var any = $dates.filter(function() { return this.value; }).length;
+                    $dates.prop('required', any > 0);
+                };
+                $('#onvacation').on('change', toggle);
+                $dates.on("change input", requireBoth);
+                toggle();
+                requireBoth();
+            });
+            </script>
             <br/>
         </tr>
       </tbody>
