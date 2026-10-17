@@ -1234,6 +1234,39 @@ class SLAChoiceField extends AdvancedSearchSelectionField {
     }
 }
 
+// Workflow stage of the ticket ("Workflow / Stage"); tickets outside a
+// workflow have no stage row, so "not set" means no row at all
+class WorkflowStageChoiceField extends AdvancedSearchSelectionField {
+    static $_stages;
+
+    function hasIdValue() {
+        return true;
+    }
+
+    function getChoices($verbose=false, $options=array()) {
+        if (!isset(static::$_stages)) {
+            require_once INCLUDE_DIR . 'class.workflow.php';
+            static::$_stages = array();
+            foreach (Workflow::objects() as $w)
+                foreach ($w->getStages() as $id => $s)
+                    static::$_stages[$id] = sprintf('%s / %s',
+                        $w->getName(), $s->getName());
+        }
+        return static::$_stages;
+    }
+
+    function getSearchQ($method, $value, $name=false) {
+        switch ($method) {
+            case 'nset':
+                return new Q(array("{$name}__isnull" => true));
+            case 'set':
+                return new Q(array("{$name}__gt" => 0));
+            default:
+                return parent::getSearchQ($method, $value, $name);
+        }
+    }
+}
+
 require_once INCLUDE_DIR . 'class.dept.php';
 class DepartmentChoiceField extends AdvancedSearchSelectionField {
     static $_depts;

@@ -138,6 +138,8 @@ class Workflow extends VerySimpleModel {
                 $errors['stages'][$key] = __('Select a team');
             elseif (in_array(mb_strtolower($sname), $keys))
                 $errors['stages'][$key] = __('Stage names must be unique');
+            elseif (!empty($s['sla_id']) && !SLA::lookup($s['sla_id']))
+                $errors['stages'][$key] = __('Select a valid SLA plan');
             $keys[] = mb_strtolower($sname);
             $stages[$key] = array(
                 'name' => $sname,
@@ -145,6 +147,10 @@ class Workflow extends VerySimpleModel {
                 'team_id' => (int) $s['team_id'],
                 'final' => !empty($s['final']),
                 'sort' => ++$sort,
+                'sla_id' => (int) ($s['sla_id'] ?? 0),
+                // Position in the diagram editor (-1 = automatic)
+                'pos_x' => isset($s['pos_x']) && is_numeric($s['pos_x']) ? (int) $s['pos_x'] : -1,
+                'pos_y' => isset($s['pos_y']) && is_numeric($s['pos_y']) ? (int) $s['pos_y'] : -1,
             );
         }
         if (!$stages)
@@ -195,6 +201,9 @@ class Workflow extends VerySimpleModel {
             $stage->dept_id = $info['dept_id'];
             $stage->team_id = $info['team_id'];
             $stage->sort = $info['sort'];
+            $stage->sla_id = $info['sla_id'];
+            $stage->pos_x = $info['pos_x'];
+            $stage->pos_y = $info['pos_y'];
             $stage->flags = ($key == $vars['initial'] ? WorkflowStage::FLAG_INITIAL : 0)
                 | ($info['final'] ? WorkflowStage::FLAG_FINAL : 0);
             $stage->updated = SqlFunction::NOW();
@@ -291,6 +300,11 @@ class WorkflowStage extends VerySimpleModel {
         return Team::lookup($this->team_id);
     }
 
+    // SLA of the stage, measured from when the ticket enters it
+    function getSLA() {
+        return $this->sla_id ? SLA::lookup($this->sla_id) : null;
+    }
+
     function isInitial() {
         return ($this->flags & self::FLAG_INITIAL) != 0;
     }
@@ -341,6 +355,15 @@ class TicketWorkflow extends VerySimpleModel {
     static $meta = array(
         'table' => TICKET_WORKFLOW_TABLE,
         'pk' => array('ticket_id'),
+        'joins' => array(
+            'ticket' => array(
+                'constraint' => array('ticket_id' => 'Ticket.ticket_id'),
+            ),
+            'stage' => array(
+                'constraint' => array('stage_id' => 'WorkflowStage.id'),
+                'null' => true,
+            ),
+        ),
     );
 
     function getWorkflow() {

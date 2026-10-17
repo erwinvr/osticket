@@ -96,6 +96,12 @@ implements RestrictedAccess, Threadable, Searchable {
                 'reverse' => 'TicketCData.ticket',
                 'list' => false,
             ),
+            // Current workflow stage (see class.workflow.php)
+            'workflow_state' => array(
+                'reverse' => 'TicketWorkflow.ticket',
+                'list' => false,
+                'null' => true,
+            ),
             'entries' => array(
                 'constraint' => array(
                     "'T'" => 'DynamicFormEntry.object_type',
@@ -554,8 +560,14 @@ implements RestrictedAccess, Threadable, Searchable {
         if (($sla = $this->getSLA()) && $sla->isActive()) {
             $schedule = $this->getDept()->getSchedule();
             $tz = new DateTimeZone($cfg->getDbTimezone());
-            $dt = new DateTime($this->getReopenDate() ?:
-                    $this->getCreateDate(), $tz);
+            $start = $this->getReopenDate() ?: $this->getCreateDate();
+            // The SLA of a workflow stage runs from when the ticket entered it
+            if (($stage = $this->getStage()) && $stage->sla_id == $sla->getId()
+                    && ($tw = $this->getWorkflowState())
+                    && is_string($tw->updated)
+                    && strtotime($tw->updated) > strtotime($start))
+                $start = $tw->updated;
+            $dt = new DateTime($start, $tz);
             $dt = $sla->addGracePeriod($dt, $schedule);
             // Make sure time is in DB timezone
             $dt->setTimezone($tz);
@@ -2347,6 +2359,9 @@ implements RestrictedAccess, Threadable, Searchable {
             'topic_id' => new HelpTopicChoiceField(array(
                 'label' => __('Help Topic'),
             )),
+            'workflow_state__stage_id' => new WorkflowStageChoiceField(array(
+                'label' => __('Stage'),
+            )),
             'source' => new TicketSourceChoiceField(array(
                 'label' => __('Ticket Source'),
             )),
@@ -2894,7 +2909,7 @@ implements RestrictedAccess, Threadable, Searchable {
             'stage_id' => $stage->getId(),
             'updated' => SqlFunction::NOW(),
         ));
-        if (!$tw->save())
+        if (!$tw->save(true))
             return false;
         $this->_workflow = $tw;
         WorkflowHistory::log($this->getId(), null, $stage);
@@ -2949,8 +2964,16 @@ implements RestrictedAccess, Threadable, Searchable {
         $tw = $this->getWorkflowState();
         $tw->stage_id = $stage->getId();
         $tw->updated = SqlFunction::NOW();
-        $tw->save();
+        $tw->save(true);
         WorkflowHistory::log($this->getId(), $current, $stage, $staff, $comments);
+
+        // SLA of the new stage (its clock starts now). A stage without SLA
+        // gives the ticket back its usual SLA (department, topic, default)
+        if ($stage->sla_id && $stage->getSLA())
+            $this->selectSLAId($stage->sla_id);
+        elseif ($current->sla_id && $this->getSLAId() == $current->sla_id)
+            $this->selectSLAId();
+        $this->updateEstDueDate();
 
         $title = sprintf(_S('Ticket derived from %1$s to %2$s'),
             $current->getName(), $stage->getName());
@@ -4558,6 +4581,8 @@ implements RestrictedAccess, Threadable, Searchable {
             $stage = $workflow->getInitialStage();
             $deptId = $stage->dept_id;
             $vars['teamId'] = $stage->team_id;
+            if ($stage->sla_id)
+                $vars['slaId'] = $stage->sla_id;
             unset($vars['staffId']);
         }
 
