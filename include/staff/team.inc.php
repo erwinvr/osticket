@@ -108,6 +108,27 @@ $info = $team->getInfo();
             </td>
         </tr>
         <tr>
+            <td width="180">
+                <?php echo __('Ticket Assignment');?>:
+            </td>
+            <td>
+<?php
+                $assignMode = ($_POST && $errors)
+                    ? $_POST['assign_mode'] : $team->getAssignmentMode(); ?>
+                <select name="assign_mode">
+<?php           foreach (Team::getAssignmentModes() as $mode => $label) { ?>
+                    <option value="<?php echo $mode; ?>" <?php
+                        echo $assignMode == $mode ? 'selected="selected"' : '';
+                        ?>><?php echo Format::htmlchars($label); ?></option>
+<?php           } ?>
+                </select>
+                &nbsp;<span class="error"><?php echo $errors['assign_mode']; ?></span>
+                <div class="faded"><em><?php echo __(
+                    'Tickets assigned to this team without an agent are given to a member who is active and not on vacation. Sequential and round robin follow the order on the Members tab.'
+                ); ?></em></div>
+            </td>
+        </tr>
+        <tr>
             <th colspan="2">
                 <em><strong><?php echo __('Admin Notes');?></strong>: <?php echo __('Internal notes viewable by all admins.');?>&nbsp;</em>
             </th>
@@ -138,6 +159,9 @@ foreach ($members as $m)
                 <?php echo sprintf(__('Agents who are members of %s'), __('this team')); ?>
                 <i class="help-tip icon-question-sign" href="#members"></i>
                 </small></div>
+                <div><small><?php echo __(
+                    'Use the arrows to set the order used by sequential and round robin assignment.'
+                ); ?></small></div>
             </td>
         </tr>
       <tr id="add_member">
@@ -161,9 +185,15 @@ foreach ($members as $m)
     <tbody>
       <tr id="member_template" class="hidden">
         <td>
+          <span class="member-pos faded"></span>
           <input type="hidden" data-name="members[]" value="" />
         </td>
         <td>
+          <a href="#" class="move-member" data-dir="up" title="<?php echo __('Move up');
+            ?>"><i class="icon-chevron-up"></i></a>
+          <a href="#" class="move-member" data-dir="down" title="<?php echo __('Move down');
+            ?>"><i class="icon-chevron-down"></i></a>
+          &nbsp;
           <label>
             <input type="checkbox" data-name="member_alerts" value="1" />
             <?php echo __('Alerts'); ?>
@@ -184,7 +214,14 @@ foreach ($members as $m)
 </form>
 
 <script type="text/javascript">
-var addMember = function(staffid, name, alerts, error) {
+// Number the member rows to show the assignment order
+var numberMembers = function() {
+  $('#members tr.member-row .member-pos').each(function(i) {
+    $(this).text((i + 1) + '. ');
+  });
+};
+
+var addMember = function(staffid, name, alerts, error, note) {
   if (!staffid) return;
   var copy = $('#member_template').clone();
 
@@ -195,11 +232,24 @@ var addMember = function(staffid, name, alerts, error) {
     .attr('name', 'member_alerts['+staffid+']')
     .prop('checked', alerts);
   copy.find('td:first').append(document.createTextNode(name));
-  copy.attr('id', '').show().insertBefore($('#add_member'));
+  if (note)
+    copy.find('td:first').append(' ', $('<small class="faded">').text(note));
+  copy.attr('id', '').addClass('member-row').show().insertBefore($('#add_member'));
   copy.removeClass('hidden')
   if (error)
       $('<div class="error">').text(error).appendTo(copy.find('td:last'));
+  numberMembers();
 };
+
+$(document).on('click', 'a.move-member', function() {
+  var tr = $(this).closest('tr');
+  if ($(this).data('dir') == 'up')
+    tr.prev('.member-row').before(tr);
+  else
+    tr.next('.member-row').after(tr);
+  numberMembers();
+  return false;
+});
 
 $('#add_member').find('button').on('click', function() {
   var selected = $('#add_access').find(':selected'),
@@ -226,18 +276,23 @@ $(document).on('click', 'a.drop-membership', function() {
     .text(tr.find('td:first').text())
   );
   $('#team-lead-select option[value='+id+']').remove();
-  tr.fadeOut(function() { $(this).remove(); });
+  tr.fadeOut(function() { $(this).remove(); numberMembers(); });
   return false;
 });
 
 <?php
 if ($team && $team->members) {
-    foreach ($team->members->sort(function($a) { return $a->staff->getName(); }) as $member) {
-        echo sprintf('addMember(%d, %s, %d, %s);',
+    $byStaff = array();
+    foreach ($team->members as $member)
+        $byStaff[$member->staff_id] = $member;
+    foreach ($team->getOrderedMembers() as $staff) {
+        $member = $byStaff[$staff->getId()];
+        echo sprintf('addMember(%d, %s, %d, %s, %s);',
             $member->staff_id,
-            JsonDataEncoder::encode((string) $member->staff->getName()),
+            JsonDataEncoder::encode((string) $staff->getName()),
             $member->isAlertsEnabled(),
-            JsonDataEncoder::encode($errors['members'][$member->staff_id])
+            JsonDataEncoder::encode($errors['members'][$member->staff_id]),
+            JsonDataEncoder::encode($staff->onVacation() ? '('.__('vacation').')' : '')
         );
     }
 }

@@ -2835,13 +2835,43 @@ implements RestrictedAccess, Threadable, Searchable {
         if ($this->isClosed())
             $this->setStaffId(0);
 
-        $this->onAssign($team, $note, $alert);
         $this->logEvent('assigned', array('team' => $team->getId()), $user);
+
+        // Hand the ticket to a member if the team distributes its tickets;
+        // the chosen agent gets the alert instead of the whole team
+        $agent = $this->autoAssignTeamMember($team, $user);
+        $this->onAssign($agent ?: $team, $note, $alert);
 
         if (($referral=$this->hasReferral($team,ObjectModel::OBJECT_TYPE_TEAM)))
             $referral->delete();
 
         return true;
+    }
+
+    /**
+     * Assigns the ticket to a team member chosen by the team's assignment
+     * mode (least busy, sequential or round robin). Only done when the
+     * ticket has no agent yet. Returns the agent or NULL.
+     */
+    function autoAssignTeamMember(Team $team, $user=null) {
+        if ($this->getStaffId()
+                || !($agent = $team->getNextAssignee($this->getDept()))
+                || !$this->setStaffId($agent->getId()))
+            return null;
+
+        $team->setLastAssigned($agent);
+        $this->logEvent('assigned', array('staff' => array($agent->getId(),
+            (string) $agent->getName()->getOriginal())),
+            $user ?: _S('Team Auto Assignment'));
+
+        $type = array('type' => 'assigned', 'auto' => true,
+            'staff' => $agent->getName()->name);
+        Signal::send('object.edited', $this, $type);
+
+        if (($referral=$this->hasReferral($agent,ObjectModel::OBJECT_TYPE_STAFF)))
+            $referral->delete();
+
+        return $agent;
     }
 
     function assign(AssignmentForm $form, &$errors, $alert=true) {
@@ -2905,6 +2935,10 @@ implements RestrictedAccess, Threadable, Searchable {
         $type = array('type' => 'assigned');
         $type += $audit;
         Signal::send('object.edited', $this, $type);
+
+        if ($assignee instanceof Team
+                && ($agent = $this->autoAssignTeamMember($assignee)))
+            $assignee = $agent;
 
         $this->onAssign($assignee, $form->getComments(), $alert);
 

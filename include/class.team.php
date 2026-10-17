@@ -35,7 +35,14 @@ implements TemplateVariable {
     const FLAG_ENABLED  = 0x0001;
     const FLAG_NOALERTS = 0x0002;
 
+    // Automatic distribution of team tickets among members
+    const ASSIGN_NONE        = '';
+    const ASSIGN_LEAST_BUSY  = 'least_busy';
+    const ASSIGN_SEQUENTIAL  = 'sequential';
+    const ASSIGN_ROUND_ROBIN = 'round_robin';
+
     var $_members;
+    var $_config;
 
     function asVar() {
         return $this->__toString();
@@ -155,6 +162,122 @@ implements TemplateVariable {
         return ($this->flags & self::FLAG_NOALERTS) == 0;
     }
 
+    /* Ticket assignment among members
+     *
+     * Settings live in the `team.<id>` config namespace:
+     *   assign_mode   - one of the ASSIGN_* constants
+     *   member_order  - JSON list of staff ids (sequential / round robin)
+     *   last_assigned - staff id of the last member picked (round robin)
+     */
+    static function getAssignmentModes() {
+        return array(
+            self::ASSIGN_NONE        => __('Disabled — assign to the team only'),
+            self::ASSIGN_LEAST_BUSY  => __('Least busy — agent with the fewest open tickets'),
+            self::ASSIGN_SEQUENTIAL  => __('Sequential — first available agent in member order'),
+            self::ASSIGN_ROUND_ROBIN => __('Round robin — rotate through members in order'),
+        );
+    }
+
+    function getConfig() {
+        if (!isset($this->_config) && $this->getId())
+            $this->_config = new Config('team.'.$this->getId());
+        return $this->_config;
+    }
+
+    function getAssignmentMode() {
+        $mode = ($c = $this->getConfig()) ? $c->get('assign_mode', '') : '';
+        return array_key_exists($mode, self::getAssignmentModes())
+            ? $mode : self::ASSIGN_NONE;
+    }
+
+    function getMemberOrder() {
+        $order = ($c = $this->getConfig())
+            ? JsonDataParser::decode($c->get('member_order', '[]')) : array();
+        return is_array($order) ? array_map('intval', $order) : array();
+    }
+
+    // Members in the configured order; new members go last, by name
+    function getOrderedMembers() {
+        $pos = array_flip($this->getMemberOrder());
+        $members = $this->getMembers();
+        usort($members, function($a, $b) use ($pos) {
+            $pa = $pos[$a->getId()] ?? PHP_INT_MAX;
+            $pb = $pos[$b->getId()] ?? PHP_INT_MAX;
+            return $pa <=> $pb
+                ?: strcasecmp((string) $a->getName(), (string) $b->getName());
+        });
+        return $members;
+    }
+
+    /**
+     * Picks the member who should receive a ticket assigned to this team,
+     * according to the assignment mode. Only active agents who are not on
+     * vacation and can be assigned in the department are considered.
+     * Returns a Staff or NULL if the mode is disabled or nobody qualifies.
+     */
+    function getNextAssignee($dept=null) {
+        if (!($mode = $this->getAssignmentMode()))
+            return null;
+
+        $members = $this->getOrderedMembers();
+        $eligible = array();
+        foreach ($members as $staff) {
+            if (!$staff->isAvailable())
+                continue;
+            if ($dept && (!$staff->canAccessDept($dept) || !$dept->canAssign($staff)))
+                continue;
+            $eligible[$staff->getId()] = $staff;
+        }
+        if (!$eligible)
+            return null;
+
+        switch ($mode) {
+        case self::ASSIGN_SEQUENTIAL:
+            return reset($eligible);
+
+        case self::ASSIGN_ROUND_ROBIN:
+            // Continue after the last member picked, in member order
+            $ids = array();
+            foreach ($members as $staff)
+                $ids[] = $staff->getId();
+            $last = array_search((int) $this->getConfig()->get('last_assigned'), $ids);
+            $start = ($last === false) ? 0 : $last + 1;
+            for ($i = 0, $n = count($ids); $i < $n; $i++) {
+                $id = $ids[($start + $i) % $n];
+                if (isset($eligible[$id]))
+                    return $eligible[$id];
+            }
+            return null;
+
+        case self::ASSIGN_LEAST_BUSY:
+            // Ties go to the member listed first
+            $load = array_fill_keys(array_keys($eligible), 0);
+            $counts = Ticket::objects()
+                ->filter(array(
+                    'staff_id__in' => array_keys($eligible),
+                    'status__state' => 'open',
+                ))
+                ->values('staff_id')
+                ->distinct('staff_id')
+                ->annotate(array('count' => SqlAggregate::COUNT('ticket_id')));
+            foreach ($counts as $row)
+                $load[$row['staff_id']] = (int) $row['count'];
+            asort($load, SORT_NUMERIC);
+            $min = reset($load);
+            foreach ($eligible as $id => $staff)
+                if ($load[$id] == $min)
+                    return $staff;
+        }
+        return null;
+    }
+
+    // Remembers who got the last ticket (used by round robin)
+    function setLastAssigned(Staff $staff) {
+        $config = new Config('team.'.$this->getId());
+        $config->set('last_assigned', $staff->getId());
+        $this->_config = null;
+    }
+
     function getTranslateTag($subtag) {
         return _H(sprintf('team.%s.%s', $subtag, $this->getId()));
     }
@@ -205,6 +328,10 @@ implements TemplateVariable {
         $this->name = Format::striptags($vars['name']);
         $this->notes = Format::sanitize($vars['notes']);
 
+        $vars['assign_mode'] = $vars['assign_mode'] ?? self::ASSIGN_NONE;
+        if (!array_key_exists($vars['assign_mode'], self::getAssignmentModes()))
+            $errors['assign_mode'] = __('Select a valid assignment mode');
+
         // Format access update as [array(staff_id, alerts?)]
         $access = array();
         if (isset($vars['members'])) {
@@ -218,6 +345,16 @@ implements TemplateVariable {
 
         if ($this->save()) {
             $this->updateMembers($access, $errors);
+            // Members are posted in the order set on the Members tab
+            $order = array();
+            foreach ((array) @$vars['members'] as $staff_id)
+                $order[] = (int) $staff_id;
+            $config = new Config('team.'.$this->getId());
+            $config->updateAll(array(
+                'assign_mode' => $vars['assign_mode'],
+                'member_order' => JsonDataEncoder::encode($order),
+            ));
+            $this->_config = null;
             return true;
         }
 
@@ -290,6 +427,10 @@ implements TemplateVariable {
 
         # Remove members of this team
         $this->members->delete();
+
+        # Remove assignment settings
+        $config = new Config('team.'.$id);
+        $config->destroy();
 
         # Reset ticket ownership for tickets owned by this team
         Ticket::objects()
