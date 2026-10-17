@@ -120,6 +120,11 @@ elseif (is_object($ticket) && $ticket->getId()) {
             $errors['err'] = __('Unable to print to PDF.')
                 .' '.__('Internal error occurred');
         break;
+    case 'zipentry':
+        // All the attachments of one message or response (no internal notes)
+        if (!$ticket->zipEntryAttachments($_REQUEST['entry'], true))
+            $errors['err'] = __('Unable to download the attachments.');
+        break;
     }
 }
 

@@ -9,7 +9,7 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 **Para quién es:**
 
 - **Administradores:** configuran vacaciones, equipos y flujos, y revisan la auditoría (secciones 2, 3, 5 a 9, 12 y 13).
-- **Agentes:** consultan su propia vacación, ven qué tickets reciben y los derivan entre etapas (secciones 4, 8, 10, 11 y 12).
+- **Agentes:** consultan su propia vacación, ven qué tickets reciben, los derivan entre etapas y descargan adjuntos (secciones 4, 8, 10, 11, 12 y 14).
 
 **Cómo entrar:**
 
@@ -33,7 +33,8 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 | Saber qué ve el cliente de su ticket | [11. Qué ve el cliente](#11-qué-ve-el-cliente) |
 | Ver o filtrar los tickets por etapa | [12. Ver la etapa en las colas y en la búsqueda](#12-ver-la-etapa-en-las-colas-y-en-la-búsqueda) |
 | Revisar quién hizo qué y cuándo | [13. Auditoría](#13-auditoría) |
-| Entender un mensaje de error | [14. Preguntas frecuentes y solución de problemas](#14-preguntas-frecuentes-y-solución-de-problemas) |
+| Bajar de una vez todos los archivos de una respuesta | [14. Descargar todos los adjuntos en un ZIP](#14-descargar-todos-los-adjuntos-en-un-zip) |
+| Entender un mensaje de error | [15. Preguntas frecuentes y solución de problemas](#15-preguntas-frecuentes-y-solución-de-problemas) |
 
 La pantalla de osTicket está en inglés. Por eso este manual escribe los nombres de botones y campos tal como aparecen, por ejemplo **Vacation Mode**.
 
@@ -75,7 +76,7 @@ Si marca **Vacation Mode** y deja las dos fechas vacías, la vacación empieza a
 - La fecha de fin no puede estar en el pasado.
 - Inicio y fin pueden ser el mismo día, para una vacación de un solo día.
 
-Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 14).
+Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 15).
 
 **Importante:** el cambio de estado lo hace una tarea automática de osTicket que corre cada pocos minutos. Si la vacación no se activa el día indicado, avise al área técnica para que revise el cron.
 
@@ -451,7 +452,28 @@ Haga clic en **Export CSV** para descargar los eventos filtrados (hasta 10.000) 
 - Los eventos de tickets, mensajes y cambios de etapa se muestran desde siempre. Los logins, cambios de configuración y acciones del cron se registran desde que se instaló esta función.
 - Las acciones que el sistema hace solo figuran con el actor **SYSTEM**, **CRON** o **Team Auto Assignment**.
 
-## 14. Preguntas frecuentes y solución de problemas
+## 14. Descargar todos los adjuntos en un ZIP
+
+Cuando un mensaje, una respuesta o una nota tiene dos o más archivos adjuntos, debajo de los archivos aparece el enlace **Download all (N files, ZIP)**. Con un clic se descargan todos juntos en un solo archivo ZIP.
+
+![Respuesta de un ticket con tres adjuntos y el enlace Download all (3 files, ZIP) debajo](img/descargar-zip.png)
+
+### Pasos
+
+1. Abra el ticket: los agentes desde el panel, los clientes desde el portal.
+2. Busque en el hilo la respuesta o el mensaje con los archivos.
+3. Haga clic en **Download all (N files, ZIP)**, debajo de la lista de archivos.
+4. El navegador descarga un archivo llamado `ticket-<número>-attachments-<n>.zip`.
+
+### Bueno saber
+
+- El enlace solo aparece si hay al menos dos archivos; con uno solo, se descarga ese archivo como siempre.
+- Si dos archivos tienen el mismo nombre, el segundo se guarda como «nombre (2)» para que no se pierda ninguno.
+- Las imágenes pegadas dentro del texto no se incluyen; solo los archivos adjuntos.
+- Los clientes solo pueden descargar los adjuntos de sus mensajes y de las respuestas que reciben, nunca los de las notas internas.
+- Para bajar el ticket completo (conversación en PDF y todos los adjuntos), los agentes siguen teniendo la exportación ZIP del ticket en el menú de impresión.
+
+## 15. Preguntas frecuentes y solución de problemas
 
 ### Mensajes de error
 
@@ -523,15 +545,16 @@ La nueva etapa pertenece a otro departamento al que usted no tiene acceso. Es lo
 
 El ticket se reabre y sigue en la etapa final, que no tiene derivaciones. Para continuar el recorrido, un administrador debe permitir derivaciones desde una etapa no final, o el ticket se gestiona fuera del flujo si este es libre.
 
-## 15. Historial de este manual
+## 16. Historial de este manual
 
 Este manual se actualiza cada vez que se agrega o cambia una función.
 
 | Fecha | Cambio |
 | --- | --- |
+| 17/10/2026 | Descarga de todos los adjuntos de una respuesta en un ZIP (sección 14) |
 | 16/10/2026 | Editor gráfico de flujos y SLA por etapa (sección 9), etapa en colas y búsqueda (sección 12) y auditoría (sección 13) |
-| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 14) |
-| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 14) |
+| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 15) |
+| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 15) |
 
 **Estado:** todas las funciones están probadas en el entorno de pruebas. Todas están guardadas en el repositorio, en la rama `feature/mejoras-osticket`. Ninguna está instalada aún en el sistema de producción.
 

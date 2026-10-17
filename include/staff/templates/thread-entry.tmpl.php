@@ -96,9 +96,11 @@ if ($user && $cfg->isAvatarsEnabled())
     if (isset($atts) && $atts) {
 ?>
     <div class="attachments"><?php
+        $files = 0;
         foreach ($atts as $A) {
             if ($A->inline)
                 continue;
+            $files++;
             $size = '';
             if ($A->file->size)
                 $size = sprintf('<small class="filesize faded">%s</small>', Format::file_size($A->file->size));
@@ -111,6 +113,16 @@ if ($user && $cfg->isAvatarsEnabled())
             target="_blank"><?php echo Format::htmlchars($A->getFilename());
         ?></a><?php echo $size;?>
         </span>
+<?php   }
+        // Several files on a ticket entry: offer them all in one ZIP
+        if ($files > 1 && ($T = $entry->getThread())
+                && $T->getObjectType() == ObjectModel::OBJECT_TYPE_TICKET) { ?>
+        <div class="download-all" style="clear:both; padding-top:4px">
+        <i class="icon-download-alt"></i>
+        <a class="no-pjax" style="font-weight:bold" href="tickets.php?id=<?php echo $T->getObjectId();
+            ?>&amp;a=zipentry&amp;entry=<?php echo $entry->getId(); ?>"><?php
+            echo sprintf(__('Download all (%d files, ZIP)'), $files); ?></a>
+        </div>
 <?php   }
     echo '</div>';
     }

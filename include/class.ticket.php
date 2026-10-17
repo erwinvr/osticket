@@ -3826,6 +3826,74 @@ implements RestrictedAccess, Threadable, Searchable {
         exit;
     }
 
+    /**
+     * Thread entry of this ticket (or of a ticket merged into it) whose
+     * attachments can be downloaded together. End users never get
+     * internal notes.
+     */
+    function getEntryForDownload($entryId, $client=false) {
+        if (!($entry = ThreadEntry::lookup((int) $entryId))
+                || !($thread = $entry->getThread())
+                || !($object = $thread->getObject())
+                || !$object instanceof Ticket
+                || ($object->getId() != $this->getId()
+                    && $object->getPid() != $this->getId()))
+            return null;
+        if ($client && $entry->getType() == 'N')
+            return null;
+        return $entry;
+    }
+
+    // Files attached to a thread entry (inline images excluded)
+    static function getEntryAttachments(ThreadEntry $entry) {
+        return Attachment::objects()
+            ->filter(array('thread_entry' => $entry, 'inline' => 0))
+            ->select_related('file')
+            ->order_by('id');
+    }
+
+    /**
+     * Sends all the attachments of a thread entry as a single ZIP file.
+     * Repeated file names get a counter so no file is lost.
+     */
+    function zipEntryAttachments($entryId, $client=false) {
+        if (!($entry = $this->getEntryForDownload($entryId, $client)))
+            return false;
+
+        $atts = static::getEntryAttachments($entry);
+        if (!count($atts))
+            return false;
+
+        $zipfile = tempnam(sys_get_temp_dir(), 'zip');
+        try {
+            $zip = new ZipArchive();
+            if ($zip->open($zipfile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true)
+                return false;
+            $used = array();
+            foreach ($atts as $att) {
+                $name = str_replace(array('/', '\\'), '_', $att->getFilename()) ?: 'file';
+                $base = pathinfo($name, PATHINFO_FILENAME);
+                $ext = pathinfo($name, PATHINFO_EXTENSION);
+                for ($i = 2; isset($used[mb_strtolower($name)]); $i++)
+                    $name = sprintf('%s (%d)%s', $base, $i, $ext !== '' ? ".$ext" : '');
+                $used[mb_strtolower($name)] = true;
+                $zip->addFromString($name, $att->getFile()->getData());
+            }
+            $zip->close();
+
+            Http::download(sprintf('ticket-%s-attachments-%d.zip',
+                    $this->getNumber(), $entry->getId()),
+                'application/zip', null, 'attachment');
+            $fp = fopen($zipfile, 'r');
+            fpassthru($fp);
+            fclose($fp);
+        }
+        finally {
+            @unlink($zipfile);
+        }
+        exit;
+    }
+
     function delete($comments='') {
         global $ost, $thisstaff;
 

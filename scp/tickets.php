@@ -547,6 +547,9 @@ if($ticket) {
         elseif (!$ticket->pdfExport($_REQUEST['psize'], $_REQUEST['notes'], $_REQUEST['events']))
             $errors['err'] = __('Unable to export the ticket to PDF for print.')
                 .' '.__('Internal error occurred');
+    } elseif ($_GET['a'] == 'zipentry' && !$ticket->zipEntryAttachments($_GET['entry'])) {
+        // All the attachments of one thread entry as a ZIP
+        $errors['err'] = __('Unable to download the attachments.');
     } elseif ($_GET['a'] == 'zip' && !$ticket->zipExport($_REQUEST['notes'], $_REQUEST['tasks'])) {
         $errors['err'] = __('Unable to export the ticket to ZIP.')
             .' '.__('Internal error occurred');
