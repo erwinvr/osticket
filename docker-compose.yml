@@ -1,0 +1,45 @@
+# Entorno de desarrollo local de osTicket.
+# Uso: docker compose up -d --build && ./docker/install.sh
+# Ver docker/README.md para más detalles.
+name: osticket
+
+services:
+  web:
+    build: ./docker
+    ports:
+      - "${WEB_PORT:-8081}:80"
+    volumes:
+      - ./:/var/www/html
+    environment:
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: osticket
+      MARIADB_USER: osticket
+      MARIADB_PASSWORD: osticket
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      - "${DB_PORT:-3307}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "${MAIL_UI_PORT:-8025}:8025"
+
+volumes:
+  db_data:
