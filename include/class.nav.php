@@ -356,6 +356,9 @@ class UserNav {
             } else {
                 $navs['status']=array('desc'=>__('Check Ticket Status'),'href'=>'view.php','title'=>'');
             }
+            // Public dashboard: tickets by topic and stage, SLA by stage
+            $navs['dashboard']=array('desc'=>__('Dashboard'),'href'=>'dashboard.php',
+                                     'title'=>__('Tickets by help topic and stage'));
             $this->navs=$navs;
         }
 

@@ -400,3 +400,56 @@ class WorkflowHistory extends VerySimpleModel {
         return static::objects()->filter(array('ticket_id' => $ticket_id));
     }
 }
+
+/**
+ * Figures for the public dashboard of the client portal (dashboard.php):
+ * tickets by help topic and current stage, and SLA breaches by stage.
+ * Only aggregated counts; no ticket or user data.
+ */
+class WorkflowDashboard {
+
+    static function getData() {
+        $data = array();
+        foreach (Workflow::objects()->order_by('name') as $w) {
+            if (!$w->isActive() || !($stages = $w->getStages()))
+                continue;
+            $data[$w->getId()] = array(
+                'workflow' => $w,
+                'stages' => $stages,
+                'topics' => array(),    // topic_id => name
+                'counts' => array(),    // topic_id => stage_id => n
+                'sla' => array(),       // stage_id => [open, overdue]
+            );
+        }
+        if (!$data)
+            return $data;
+        $ids = implode(',', array_map('intval', array_keys($data)));
+
+        // Tickets by help topic and current stage
+        $res = db_query('SELECT tw.workflow_id, t.topic_id, tw.stage_id, COUNT(*)
+            FROM '.TICKET_WORKFLOW_TABLE.' tw
+            JOIN '.TICKET_TABLE.' t ON t.ticket_id = tw.ticket_id
+            WHERE tw.workflow_id IN ('.$ids.')
+            GROUP BY tw.workflow_id, t.topic_id, tw.stage_id');
+        while ($res && (list($wid, $tid, $sid, $n) = db_fetch_row($res))) {
+            $data[$wid]['counts'][(int) $tid][(int) $sid] = (int) $n;
+            $data[$wid]['topics'][(int) $tid] = $tid
+                ? (Topic::getTopicName($tid) ?: __('Unknown')) : __('No help topic');
+        }
+
+        // Open tickets and SLA breaches (due date passed) by stage
+        $res = db_query('SELECT tw.workflow_id, tw.stage_id, COUNT(*),
+                SUM(t.isoverdue = 1 OR COALESCE(t.duedate, t.est_duedate) < NOW())
+            FROM '.TICKET_WORKFLOW_TABLE.' tw
+            JOIN '.TICKET_TABLE.' t ON t.ticket_id = tw.ticket_id
+            JOIN '.TICKET_STATUS_TABLE.' st ON st.id = t.status_id
+            WHERE tw.workflow_id IN ('.$ids.') AND st.state = \'open\'
+            GROUP BY tw.workflow_id, tw.stage_id');
+        while ($res && (list($wid, $sid, $open, $late) = db_fetch_row($res)))
+            $data[$wid]['sla'][(int) $sid] = array((int) $open, (int) $late);
+
+        foreach ($data as &$d)
+            asort($d['topics'], SORT_NATURAL | SORT_FLAG_CASE);
+        return $data;
+    }
+}

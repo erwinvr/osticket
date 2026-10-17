@@ -386,6 +386,9 @@ body {
 #nav li a.tickets {
   background-image: url('../images/icons/tix.png');
 }
+#nav li a.dashboard {
+  background-image: url('../images/icons/page.png');
+}
 #content {
   padding: 20px 0;
   margin: 0 20px;

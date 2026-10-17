@@ -35,7 +35,8 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 | Revisar quién hizo qué y cuándo | [13. Auditoría](#13-auditoría) |
 | Bajar de una vez todos los archivos de una respuesta | [14. Descargar todos los adjuntos en un ZIP](#14-descargar-todos-los-adjuntos-en-un-zip) |
 | Buscar tickets por número, asunto, contenido o fecha | [15. Buscar tickets](#15-buscar-tickets) |
-| Entender un mensaje de error | [16. Preguntas frecuentes y solución de problemas](#16-preguntas-frecuentes-y-solución-de-problemas) |
+| Ver cuántos casos hay por tema y etapa, y cuántos vencieron el SLA | [16. Dashboard del portal](#16-dashboard-del-portal) |
+| Entender un mensaje de error | [17. Preguntas frecuentes y solución de problemas](#17-preguntas-frecuentes-y-solución-de-problemas) |
 
 La pantalla de osTicket está en inglés. Por eso este manual escribe los nombres de botones y campos tal como aparecen, por ejemplo **Vacation Mode**.
 
@@ -77,7 +78,7 @@ Si marca **Vacation Mode** y deja las dos fechas vacías, la vacación empieza a
 - La fecha de fin no puede estar en el pasado.
 - Inicio y fin pueden ser el mismo día, para una vacación de un solo día.
 
-Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 16).
+Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 17).
 
 **Importante:** el cambio de estado lo hace una tarea automática de osTicket que corre cada pocos minutos. Si la vacación no se activa el día indicado, avise al área técnica para que revise el cron.
 
@@ -505,7 +506,37 @@ En la pantalla **Tickets**, la barra de búsqueda permite combinar cuatro filtro
 - Debajo de la lista se indica cuántos tickets se encontraron. Si son más de 500, se indica «about 500» y conviene acotar la búsqueda.
 - Para búsquedas más complejas (por agente, estado, etapa, campos personalizados…) sigue disponible **[advanced]**.
 
-## 16. Preguntas frecuentes y solución de problemas
+## 16. Dashboard del portal
+
+El portal de clientes (Support Center) tiene una opción **Dashboard** en el menú superior. Muestra, para cada flujo activo, cuántos casos hay por tema de ayuda en cada etapa y cuántos tickets abiertos ya vencieron su SLA en cada etapa. Se puede actualizar solo cada 5 segundos, 5 minutos o 10 minutos.
+
+**Quién puede verlo:** cualquiera que entre al portal, con o sin sesión. Solo muestra cantidades: ningún dato de tickets, clientes ni agentes.
+
+![Dashboard del portal: tabla de tickets por tema de ayuda y etapa, y tabla de tickets vencidos por etapa con su porcentaje](img/dashboard-portal.png)
+
+### Pasos
+
+1. Entre al portal de osTicket (la dirección principal del helpdesk).
+2. En el menú superior, haga clic en **Dashboard**.
+3. Opcional: en **Auto refresh**, elija cada cuánto se actualizan los números: **5 seconds**, **5 minutes** o **10 minutes**. Con **Off** no se actualiza solo.
+
+La pantalla recuerda la frecuencia elegida en ese navegador. Junto a los botones se indica la hora de la última actualización.
+
+### Qué muestra
+
+| Tabla | Qué cuenta |
+| --- | --- |
+| **Tickets by help topic and stage** | Una fila por tema de ayuda y una columna por etapa del flujo: cuántos tickets están hoy en cada etapa. Incluye los cerrados en la etapa final. Con totales por fila y por columna |
+| **SLA breaches by stage** | Por etapa: tickets abiertos, cuántos ya pasaron su fecha de vencimiento (**Past SLA**) y qué porcentaje representan |
+
+### Bueno saber
+
+- Cada ticket se cuenta en la etapa en la que está ahora, no en las que ya pasó.
+- Solo aparecen los flujos activos y los temas de ayuda que tienen tickets.
+- «Past SLA» usa la fecha de vencimiento del ticket: la fijada a mano si la hay, o la del SLA (por etapa, si la etapa tiene uno; vea la sección 9).
+- La actualización automática solo recarga los números, no toda la página.
+
+## 17. Preguntas frecuentes y solución de problemas
 
 ### Mensajes de error
 
@@ -577,17 +608,18 @@ La nueva etapa pertenece a otro departamento al que usted no tiene acceso. Es lo
 
 El ticket se reabre y sigue en la etapa final, que no tiene derivaciones. Para continuar el recorrido, un administrador debe permitir derivaciones desde una etapa no final, o el ticket se gestiona fuera del flujo si este es libre.
 
-## 17. Historial de este manual
+## 18. Historial de este manual
 
 Este manual se actualiza cada vez que se agrega o cambia una función.
 
 | Fecha | Cambio |
 | --- | --- |
+| 17/10/2026 | Dashboard del portal con casos por tema y etapa, vencimientos de SLA por etapa y actualización automática (sección 16) |
 | 17/10/2026 | Nueva barra de búsqueda de tickets por número, asunto, contenido y fecha de creación (sección 15) |
 | 17/10/2026 | Descarga de todos los adjuntos de una respuesta en un ZIP (sección 14) |
 | 16/10/2026 | Editor gráfico de flujos y SLA por etapa (sección 9), etapa en colas y búsqueda (sección 12) y auditoría (sección 13) |
-| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 16) |
-| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 16) |
+| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 17) |
+| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 17) |
 
 **Estado:** todas las funciones están probadas en el entorno de pruebas. Todas están guardadas en el repositorio, en la rama `feature/mejoras-osticket`. Ninguna está instalada aún en el sistema de producción.
 
