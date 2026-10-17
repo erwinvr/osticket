@@ -126,6 +126,38 @@ $info = $team->getInfo();
                 <div class="faded"><em><?php echo __(
                     'Tickets assigned to this team without an agent are given to a member who is active and not on vacation. Sequential and round robin follow the order on the Members tab.'
                 ); ?></em></div>
+<?php
+                $posted = $_POST && $errors;
+                $leadFallback = $posted ? isset($_POST['lead_fallback'])
+                    : $team->isLeadFallbackEnabled();
+                $retryPending = $posted ? isset($_POST['retry_pending'])
+                    : $team->isRetryPendingEnabled(); ?>
+                <div id="assign-options" style="margin-top:6px">
+                  <label class="checkbox">
+                    <input type="checkbox" name="lead_fallback" value="1"
+                      <?php echo $leadFallback ? 'checked="checked"' : ''; ?> />
+                    <?php echo __('If no member is available, assign to the team lead'); ?>
+                  </label>
+                  <span class="error"><?php echo $errors['lead_fallback']; ?></span>
+                  <label class="checkbox">
+                    <input type="checkbox" name="retry_pending" value="1"
+                      <?php echo $retryPending ? 'checked="checked"' : ''; ?> />
+                    <?php echo __('Hand out open team tickets without an agent as soon as a member is available (cron)'); ?>
+                  </label>
+                  <div class="faded"><em><?php echo __(
+                    'This also applies to team tickets that were already waiting without an agent when the option is enabled.'
+                  ); ?></em></div>
+                </div>
+                <script type="text/javascript">
+                $(function() {
+                    var toggle = function() {
+                        var on = !!$('select[name=assign_mode]').val();
+                        $('#assign-options').toggle(on);
+                    };
+                    $('select[name=assign_mode]').on('change', toggle);
+                    toggle();
+                });
+                </script>
             </td>
         </tr>
         <tr>

@@ -168,6 +168,8 @@ implements TemplateVariable {
      *   assign_mode   - one of the ASSIGN_* constants
      *   member_order  - JSON list of staff ids (sequential / round robin)
      *   last_assigned - staff id of the last member picked (round robin)
+     *   lead_fallback - assign to the team lead when no member is available
+     *   retry_pending - cron hands out team tickets left without an agent
      */
     static function getAssignmentModes() {
         return array(
@@ -196,6 +198,32 @@ implements TemplateVariable {
         return is_array($order) ? array_map('intval', $order) : array();
     }
 
+    function isLeadFallbackEnabled() {
+        return ($c = $this->getConfig()) && $c->get('lead_fallback');
+    }
+
+    function isRetryPendingEnabled() {
+        return ($c = $this->getConfig()) && $c->get('retry_pending');
+    }
+
+    // Active, not on vacation and allowed to own tickets of the department
+    static function canReceiveTicket(Staff $staff, $dept=null) {
+        if (!$staff->isAvailable())
+            return false;
+        if ($dept && (!$staff->canAccessDept($dept) || !$dept->canAssign($staff)))
+            return false;
+        return true;
+    }
+
+    // Team lead, if enabled as fallback and able to take the ticket
+    function getFallbackAssignee($dept=null) {
+        if (!$this->getAssignmentMode()
+                || !$this->isLeadFallbackEnabled()
+                || !($lead = $this->getTeamLead()))
+            return null;
+        return self::canReceiveTicket($lead, $dept) ? $lead : null;
+    }
+
     // Members in the configured order; new members go last, by name
     function getOrderedMembers() {
         $pos = array_flip($this->getMemberOrder());
@@ -222,11 +250,8 @@ implements TemplateVariable {
         $members = $this->getOrderedMembers();
         $eligible = array();
         foreach ($members as $staff) {
-            if (!$staff->isAvailable())
-                continue;
-            if ($dept && (!$staff->canAccessDept($dept) || !$dept->canAssign($staff)))
-                continue;
-            $eligible[$staff->getId()] = $staff;
+            if (self::canReceiveTicket($staff, $dept))
+                $eligible[$staff->getId()] = $staff;
         }
         if (!$eligible)
             return null;
@@ -269,6 +294,32 @@ implements TemplateVariable {
                     return $staff;
         }
         return null;
+    }
+
+    /**
+     * Cron: gives open tickets of the team that have no agent to members
+     * who are now available (e.g. back from vacation), oldest first.
+     */
+    static function assignPendingTickets($limit=50) {
+        $teams = static::objects()->filter(array(
+            'flags__hasbit' => self::FLAG_ENABLED,
+        ));
+        foreach ($teams as $team) {
+            if (!$team->getAssignmentMode() || !$team->isRetryPendingEnabled())
+                continue;
+            $tickets = Ticket::objects()
+                ->filter(array(
+                    'team_id' => $team->getId(),
+                    'staff_id' => 0,
+                    'status__state' => 'open',
+                ))
+                ->order_by('created')
+                ->limit($limit);
+            foreach ($tickets as $ticket) {
+                if ($agent = $ticket->autoAssignTeamMember($team, null, false))
+                    $ticket->onAssign($agent, '', true);
+            }
+        }
     }
 
     // Remembers who got the last ticket (used by round robin)
@@ -331,6 +382,10 @@ implements TemplateVariable {
         $vars['assign_mode'] = $vars['assign_mode'] ?? self::ASSIGN_NONE;
         if (!array_key_exists($vars['assign_mode'], self::getAssignmentModes()))
             $errors['assign_mode'] = __('Select a valid assignment mode');
+        $vars['lead_fallback'] = isset($vars['lead_fallback']) ? 1 : 0;
+        $vars['retry_pending'] = isset($vars['retry_pending']) ? 1 : 0;
+        if ($vars['assign_mode'] && $vars['lead_fallback'] && !$vars['lead_id'])
+            $errors['lead_fallback'] = __('Select a team lead to use as fallback');
 
         // Format access update as [array(staff_id, alerts?)]
         $access = array();
@@ -353,6 +408,8 @@ implements TemplateVariable {
             $config->updateAll(array(
                 'assign_mode' => $vars['assign_mode'],
                 'member_order' => JsonDataEncoder::encode($order),
+                'lead_fallback' => $vars['lead_fallback'],
+                'retry_pending' => $vars['retry_pending'],
             ));
             $this->_config = null;
             return true;

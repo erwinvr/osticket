@@ -2850,16 +2850,45 @@ implements RestrictedAccess, Threadable, Searchable {
 
     /**
      * Assigns the ticket to a team member chosen by the team's assignment
-     * mode (least busy, sequential or round robin). Only done when the
-     * ticket has no agent yet. Returns the agent or NULL.
+     * mode (least busy, sequential or round robin), falling back to the
+     * team lead if enabled. Only done when the ticket has no agent yet.
+     * Returns the agent or NULL.
+     *
+     * $note - log an internal note when nobody is available or the lead
+     *         is used (FALSE on cron retries to avoid repeated notes)
      */
-    function autoAssignTeamMember(Team $team, $user=null) {
-        if ($this->getStaffId()
-                || !($agent = $team->getNextAssignee($this->getDept()))
-                || !$this->setStaffId($agent->getId()))
+    function autoAssignTeamMember(Team $team, $user=null, $note=true) {
+        if ($this->getStaffId() || !$team->getAssignmentMode())
             return null;
 
-        $team->setLastAssigned($agent);
+        $dept = $this->getDept();
+        $lead = false;
+        if (!($agent = $team->getNextAssignee($dept))
+                && ($agent = $team->getFallbackAssignee($dept)))
+            $lead = true;
+
+        if (!$agent) {
+            if ($note)
+                $this->logNote(_S('Team Auto Assignment'), sprintf(
+                    _S('No agent of team %s was available (on vacation, locked or without access to the department). The ticket remains assigned to the team.'),
+                    Format::htmlchars($team->getName())),
+                    'SYSTEM', false);
+            return null;
+        }
+
+        if (!$this->setStaffId($agent->getId()))
+            return null;
+
+        // The lead is outside the rotation
+        if ($lead) {
+            if ($note)
+                $this->logNote(_S('Team Auto Assignment'), sprintf(
+                    _S('No member of team %s was available. Assigned to the team lead.'),
+                    Format::htmlchars($team->getName())),
+                    'SYSTEM', false);
+        } else {
+            $team->setLastAssigned($agent);
+        }
         $this->logEvent('assigned', array('staff' => array($agent->getId(),
             (string) $agent->getName()->getOriginal())),
             $user ?: _S('Team Auto Assignment'));

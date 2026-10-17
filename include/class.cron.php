@@ -39,6 +39,11 @@ class Cron {
         Staff::syncVacations(); //Start/end scheduled agent vacations
     }
 
+    static function TeamAssignmentMonitor() {
+        require_once(INCLUDE_DIR.'class.team.php');
+        Team::assignPendingTickets(); //Hand out team tickets without an agent
+    }
+
     static function PurgeLogs() {
         global $ost;
         // Once a day on a 5-minute cron
@@ -115,6 +120,7 @@ class Cron {
         self::MailFetcher();
         self::TicketMonitor();
         self::VacationMonitor();
+        self::TeamAssignmentMonitor();
         self::PurgeLogs();
         self::CleanExpiredSessions();
         self::CleanPwResets();
