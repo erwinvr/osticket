@@ -106,3 +106,12 @@ Después de editar `.env`, ejecutar `docker compose up -d`.
   En desarrollo es esperado y se ignora: `setup/` es parte del código fuente
   (instalador, tests, scripts) y no se debe borrar del repo. En producción sí
   se elimina, ya que `php manage.php deploy` la excluye.
+- **Tablas de los flujos (stream `workflow`):** viven en una línea de
+  actualización propia, separada de la oficial (`core`), declarada en
+  `include/upgrader/streams/streams.cfg`. En una base existente, después de
+  actualizar el código se ejecuta `docker compose exec web php manage.php upgrade`
+  (en producción, el asistente del panel). Si se cambia
+  `setup/inc/streams/workflow/install-mysql.sql`, hay que actualizar
+  `include/upgrader/streams/workflow.sig` con su nuevo md5 y agregar un parche
+  `<firma anterior 8>-<firma nueva 8>.patch.sql` en `include/upgrader/streams/workflow/`
+  que termine registrando la nueva firma en `ost_config` (namespace `workflow`).

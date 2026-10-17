@@ -105,8 +105,8 @@ if($ticket->isOverdue())
               </ul>
             </div>
             <?php
-            // Transfer
-            if ($role->hasPerm(Ticket::PERM_TRANSFER)) {?>
+            // Transfer (not in fixed workflows: those move with Derive)
+            if ($role->hasPerm(Ticket::PERM_TRANSFER) && !$ticket->isWorkflowStrict()) {?>
             <a class="action-button pull-right ticket-action" id="ticket-transfer" data-placement="bottom" data-toggle="tooltip" title="<?php echo __('Transfer'); ?>"
                 data-redirect="tickets.php"
                 href="#tickets/<?php echo $ticket->getId(); ?>/transfer"><i class="icon-share"></i></a>
@@ -353,7 +353,7 @@ if($ticket->isOverdue())
                 <tr>
                     <th><?php echo __('Department');?>:</th>
                     <?php
-                    if ($role->hasPerm(Ticket::PERM_TRANSFER)) {?>
+                    if ($role->hasPerm(Ticket::PERM_TRANSFER) && !$ticket->isWorkflowStrict()) {?>
                       <td>
                           <a class="ticket-action" data-placement="bottom" data-toggle="tooltip" title="<?php echo __('Transfer'); ?>"
                             data-redirect="tickets.php?id=<?php echo $ticket->getId(); ?>"
@@ -368,6 +368,15 @@ if($ticket->isOverdue())
                     <td><?php echo Format::htmlchars($ticket->getDeptName()); ?></td>
                   <?php } ?>
                 </tr>
+                <?php
+                if ($stage = $ticket->getStage()) { ?>
+                <tr>
+                    <th><?php echo __('Stage');?>:</th>
+                    <td><strong><?php echo Format::htmlchars($stage->getName()); ?></strong>
+                        <span class="faded">(<?php echo Format::htmlchars($ticket->getWorkflow()->getName()); ?>)</span></td>
+                </tr>
+                <?php
+                } ?>
                 <tr>
                     <th><?php echo __('Create Date');?>:</th>
                     <td><?php echo Format::datetime($ticket->getCreateDate()); ?></td>
@@ -511,6 +520,56 @@ if($ticket->isOverdue())
         </td>
     </tr>
 </table>
+<?php
+if ($stage = $ticket->getStage()) {
+    $nextStages = $ticket->isOpen() ? $stage->getNextStages() : array();
+    $history = WorkflowHistory::forTicket($ticket->getId()); ?>
+<div id="workflow-panel" style="margin-top:10px; padding:8px 10px; border:1px solid #ddd; background:#fafafa; width:918px">
+    <strong><?php echo __('Workflow'); ?>:</strong>
+    <?php echo Format::htmlchars($ticket->getWorkflow()->getName()); ?> &mdash;
+    <?php echo __('current stage'); ?> <strong><?php echo Format::htmlchars($stage->getName()); ?></strong>
+<?php
+    if ($nextStages && $ticket->canDerive($thisstaff)) { ?>
+    <form action="tickets.php?id=<?php echo $ticket->getId(); ?>" method="post" style="margin-top:8px">
+        <?php csrf_token(); ?>
+        <input type="hidden" name="id" value="<?php echo $ticket->getId(); ?>">
+        <input type="hidden" name="a" value="derive">
+        <?php echo __('Derive to'); ?>:
+        <select name="stage_id">
+<?php   foreach ($nextStages as $id => $ns) { ?>
+            <option value="<?php echo $id; ?>"><?php echo Format::htmlchars($ns->getName());
+                echo $ns->isFinal() ? ' ('.__('closes the ticket').')' : ''; ?></option>
+<?php   } ?>
+        </select>
+        <span class="error"><?php echo $errors['stage']; ?></span><br/>
+        <textarea name="derive_comments" rows="2" style="width:600px; margin-top:6px"
+            placeholder="<?php echo __('Comments for the next stage (optional, saved as an internal note)'); ?>"></textarea><br/>
+        <button type="submit" class="action-button"><i class="icon-share"></i> <?php echo __('Derive'); ?></button>
+    </form>
+<?php
+    } elseif ($nextStages) { ?>
+    <div class="faded"><?php echo __('Only the assigned agent or the lead of the stage team can derive this ticket.'); ?></div>
+<?php
+    } ?>
+    <details style="margin-top:8px"><summary><?php echo __('Stage history'); ?></summary>
+        <table class="list" width="100%" style="margin-top:4px">
+            <tr><th><?php echo __('Date'); ?></th><th><?php echo __('From'); ?></th><th><?php echo __('To'); ?></th><th><?php echo __('Agent'); ?></th></tr>
+<?php
+    foreach ($history as $h) {
+        $agent = $h->staff_id ? Staff::lookup($h->staff_id) : null; ?>
+            <tr>
+                <td><?php echo Format::datetime($h->created); ?></td>
+                <td><?php echo $h->from_name ? Format::htmlchars($h->from_name) : '<em class="faded">'.__('Ticket opened').'</em>'; ?></td>
+                <td><?php echo Format::htmlchars($h->to_name); ?></td>
+                <td><?php echo $agent ? Format::htmlchars((string) $agent->getName()) : __('SYSTEM'); ?></td>
+            </tr>
+<?php
+    } ?>
+        </table>
+    </details>
+</div>
+<?php
+} ?>
 <br>
 <table class="ticket_info" cellspacing="0" cellpadding="0" width="940" border="0">
     <tr>

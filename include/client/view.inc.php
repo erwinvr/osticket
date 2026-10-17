@@ -70,6 +70,14 @@ if ($thisclient && $thisclient->isGuest()
                     <th><?php echo __('Department');?>:</th>
                     <td><?php echo Format::htmlchars($dept instanceof Dept ? $dept->getName() : ''); ?></td>
                 </tr>
+                <?php
+                if ($stageName = $ticket->getStageName()) { ?>
+                <tr>
+                    <th><?php echo __('Stage');?>:</th>
+                    <td><?php echo Format::htmlchars($stageName); ?></td>
+                </tr>
+                <?php
+                } ?>
                 <tr>
                     <th><?php echo __('Create Date');?>:</th>
                     <td><?php echo Format::datetime($ticket->getCreateDate()); ?></td>

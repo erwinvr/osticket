@@ -50,8 +50,10 @@ class Upgrader {
         if ($this->isAborted())
             return false;
 
+        // Streams already at their tip (e.g. core while only an add-on
+        // stream is pending) don't need a patch to be upgradable
         foreach ($this->streams as $s)
-            if (!$s->isUpgradable())
+            if (!$s->isUpToDate() && !$s->isUpgradable())
                 return false;
 
         return true;
@@ -211,6 +213,11 @@ class StreamUpgrader extends SetupWizard {
 
     function isUpgradable() {
         return $this->getNextPatch();
+    }
+
+    function isUpToDate() {
+        return !strcasecmp($this->signature, $this->target)
+            && !$this->getPendingTask();
     }
 
     function getSchemaSignature() {

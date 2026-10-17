@@ -166,6 +166,20 @@ if($_POST && !$errors):
         $dept = $ticket->getDept();
         $isManager = $dept->isManager($thisstaff); //Check if Agent is Manager
         switch(strtolower($_POST['a'])):
+        case 'derive':
+            if (!($stage = WorkflowStage::lookup((int) $_POST['stage_id']))) {
+                $errors['stage'] = __('Select one of the allowed stages');
+            } elseif ($ticket->derive($stage, $_POST['derive_comments'], $thisstaff, $errors)) {
+                $msg = sprintf(__('Ticket derived to %s'), Format::htmlchars($stage->getName()));
+                $redirect = 'tickets.php?id='.$ticket->getId();
+                // The agent may no longer have access in the new stage
+                if (!$ticket->checkStaffPerm($thisstaff))
+                    $redirect = 'tickets.php';
+            }
+            if ($errors && !$errors['err'])
+                $errors['err'] = sprintf('%s %s', __('Unable to derive the ticket.'),
+                    __('Correct any errors below and try again.'));
+            break;
         case 'reply':
             if (!$role || !$role->hasPerm(Ticket::PERM_REPLY)) {
                 $errors['err'] = __('Action denied. Contact admin for access');

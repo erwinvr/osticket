@@ -35,6 +35,7 @@ require_once(INCLUDE_DIR.'class.user.php');
 require_once(INCLUDE_DIR.'class.collaborator.php');
 require_once(INCLUDE_DIR.'class.task.php');
 require_once(INCLUDE_DIR.'class.faq.php');
+require_once(INCLUDE_DIR.'class.workflow.php');
 
 class Ticket extends VerySimpleModel
 implements RestrictedAccess, Threadable, Searchable {
@@ -212,6 +213,7 @@ implements RestrictedAccess, Threadable, Searchable {
     var $recipients;
     var $lastrespondent;
     var $lastuserrespondent;
+    var $_workflow;  // TicketWorkflow (current stage)
     var $_children;
 
     function loadDynamicData($force=false) {
@@ -2659,6 +2661,11 @@ implements RestrictedAccess, Threadable, Searchable {
         if (!$this->checkStaffPerm($thisstaff, Ticket::PERM_TRANSFER))
             return false;
 
+        if ($this->isWorkflowStrict()) {
+            $errors['err'] = __('This ticket follows a fixed workflow. Use Derive to move it to another stage.');
+            return false;
+        }
+
         $cdept = $this->getDept(); // Current department
         $dept = $form->getDept(); // Target department
         if (!$dept || !($dept instanceof Dept))
@@ -2848,6 +2855,135 @@ implements RestrictedAccess, Threadable, Searchable {
         return true;
     }
 
+    /* Workflow (stages by help topic)
+     *
+     * A ticket follows the workflow of the help topic it was opened with.
+     * Each stage has a department and a team; the ticket only moves to the
+     * stages allowed from its current one ("derive").
+     */
+    function getWorkflowState() {
+        if (!isset($this->_workflow))
+            $this->_workflow = TicketWorkflow::lookup($this->getId()) ?: false;
+        return $this->_workflow ?: null;
+    }
+
+    function getWorkflow() {
+        return ($tw = $this->getWorkflowState()) ? $tw->getWorkflow() : null;
+    }
+
+    function getStage() {
+        return ($tw = $this->getWorkflowState()) ? $tw->getStage() : null;
+    }
+
+    function getStageName() {
+        return ($stage = $this->getStage()) ? $stage->getName() : '';
+    }
+
+    // Fixed workflows only move through derivations
+    function isWorkflowStrict() {
+        return ($w = $this->getWorkflow()) && $w->isStrict();
+    }
+
+    // Puts a new ticket in the initial stage of the workflow
+    function enterWorkflow(Workflow $workflow) {
+        if (!($stage = $workflow->getInitialStage()))
+            return false;
+        $tw = new TicketWorkflow(array(
+            'ticket_id' => $this->getId(),
+            'workflow_id' => $workflow->getId(),
+            'stage_id' => $stage->getId(),
+            'updated' => SqlFunction::NOW(),
+        ));
+        if (!$tw->save())
+            return false;
+        $this->_workflow = $tw;
+        WorkflowHistory::log($this->getId(), null, $stage);
+        return true;
+    }
+
+    // Only the assigned agent or the lead of the current stage's team
+    function canDerive($staff) {
+        if (!$staff || !($stage = $this->getStage()))
+            return false;
+        if ($this->getStaffId() && $this->getStaffId() == $staff->getId())
+            return true;
+        return ($team = $stage->getTeam()) && $team->getLeadId() == $staff->getId();
+    }
+
+    /**
+     * Moves the ticket to an allowed stage: department and team of the new
+     * stage take over (the team distributes it among its members). A final
+     * stage closes the ticket.
+     */
+    function derive(WorkflowStage $stage, $comments, $staff, &$errors) {
+        global $thisstaff;
+
+        $comments = ThreadEntryBody::clean($comments);
+        if (!($current = $this->getStage()))
+            $errors['err'] = __('This ticket does not follow a workflow');
+        elseif (!$this->canDerive($staff))
+            $errors['err'] = __('Only the assigned agent or the lead of the stage team can derive this ticket');
+        elseif (!$current->canDeriveTo($stage))
+            $errors['stage'] = __('Select one of the allowed stages');
+        elseif (!($dept = $stage->getDept()) || !($team = $stage->getTeam()))
+            $errors['stage'] = __('The selected stage has no department or team');
+        elseif (!$stage->isFinal() && !$team->isActive())
+            $errors['stage'] = sprintf(__('Team %s is disabled'), $team->getName());
+        elseif ($stage->isFinal() && ($closeable = $this->isCloseable()) !== true)
+            $errors['err'] = $closeable;
+        if ($errors)
+            return false;
+
+        // Department of the new stage
+        if ($dept->getId() != $this->getDeptId()) {
+            $this->dept = $dept;
+            if (!$this->save(true))
+                return false;
+            if (!$this->getSLAId() || $this->getSLA()->isTransient())
+                if (($slaId = $dept->getSLAId()))
+                    $this->selectSLAId($slaId);
+            $this->logEvent('transferred', array('dept' => $dept->getName()));
+        }
+
+        // Stage change + history
+        $tw = $this->getWorkflowState();
+        $tw->stage_id = $stage->getId();
+        $tw->updated = SqlFunction::NOW();
+        $tw->save();
+        WorkflowHistory::log($this->getId(), $current, $stage, $staff, $comments);
+
+        $title = sprintf(_S('Ticket derived from %1$s to %2$s'),
+            $current->getName(), $stage->getName());
+        $this->logNote($title, $comments ?: Format::htmlchars($title), $staff, false);
+
+        // The team of the new stage takes the ticket over
+        $this->setStaffId(0);
+        if ($stage->isFinal()) {
+            $this->setTeamId($team->getId());
+            // Closing is part of the workflow design: done as the system,
+            // with the deriving agent recorded as the closing agent
+            $agent = $thisstaff;
+            $thisstaff = null;
+            $closed = null;
+            foreach (TicketStatusList::getStatuses(array('states' => array('closed'))) as $s) {
+                $closed = $s;
+                break;
+            }
+            $ok = $closed && $this->setStatus($closed, '', $errors, false, true);
+            $thisstaff = $agent;
+            if ($ok && $staff)
+                $this->setStaffId($staff->getId());
+        } else {
+            if ($this->getTeamId() == $team->getId())
+                $this->setTeamId(0);
+            $this->assignToTeam($team, false, true, $staff ? $staff->getUserName() : null);
+        }
+
+        $type = array('type' => 'edited', 'key' => 'stage');
+        Signal::send('object.edited', $this, $type);
+        return true;
+    }
+
     /**
      * Assigns the ticket to a team member chosen by the team's assignment
      * mode (least busy, sequential or round robin), falling back to the
@@ -2944,6 +3080,12 @@ implements RestrictedAccess, Threadable, Searchable {
                         );
             } elseif (!$dept->canAssign($assignee)) {
                 $errors['err'] = __('Permission denied');
+            } elseif ($this->isWorkflowStrict()
+                    && ($stage = $this->getStage())
+                    && $stage->team_id != $assignee->getId()) {
+                $errors['assignee'] = sprintf(
+                    __('This ticket follows a fixed workflow and belongs to team %s'),
+                    ($t = $stage->getTeam()) ? $t->getName() : '');
             } else {
                 $refer = $this->team ?: null;
                 $this->team_id = $assignee->getId();
@@ -3706,6 +3848,9 @@ implements RestrictedAccess, Threadable, Searchable {
         if ($this->cdata)
             $this->cdata->delete();
 
+        TicketWorkflow::objects()->filter(array('ticket_id' => $this->getId()))->delete();
+        WorkflowHistory::forTicket($this->getId())->delete();
+
         // Log delete
         $log = sprintf(__('Ticket #%1$s deleted by %2$s'),
             $this->getNumber(),
@@ -4406,6 +4551,16 @@ implements RestrictedAccess, Threadable, Searchable {
                 $vars['teamId'] = substr($code, 1);
         }
 
+        // Workflow of the help topic: its initial stage decides department
+        // and team (the team distributes the ticket among its members)
+        $workflow = isset($topic) ? Workflow::getForNewTicket($topic->getId()) : null;
+        if ($workflow) {
+            $stage = $workflow->getInitialStage();
+            $deptId = $stage->dept_id;
+            $vars['teamId'] = $stage->team_id;
+            unset($vars['staffId']);
+        }
+
         // Last minute checks
         $priority = $form->getAnswer('priority');
         if (!$priority || !$priority->getIdValue())
@@ -4442,6 +4597,9 @@ implements RestrictedAccess, Threadable, Searchable {
             return null;
         if (!($thread = TicketThread::create($ticket->getId())))
             return null;
+
+        if ($workflow)
+            $ticket->enterWorkflow($workflow);
 
         /* -------------------- POST CREATE ------------------------ */
 
