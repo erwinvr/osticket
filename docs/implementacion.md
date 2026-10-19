@@ -21,6 +21,7 @@ En resumen: se copia el código, se ejecuta una actualización de base de datos 
 | Barra de búsqueda de tickets | Panel de agentes → Tickets | Ninguno |
 | Dashboard público del portal | Portal de clientes → Dashboard | Ninguno |
 | Reportes con exportación a CSV | Panel de agentes → Reports | Ninguno |
+| Automatizaciones por tema de ayuda y campos de formulario | Admin Panel → Manage → Filters | 2 tablas nuevas (línea `automation`) |
 
 ## 2. Requisitos
 
@@ -55,20 +56,23 @@ El código está en el repositorio [erwinvr/osticket](https://github.com/erwinvr
 | `include/class.workflow.php` | Modelos de flujos, etapas, derivaciones, historial y datos del dashboard del portal |
 | `include/class.audit.php` | Registro de auditoría y consulta unificada de eventos |
 | `include/class.reports.php` | Cálculo de los reportes |
+| `include/class.automation.php` | Tema de ayuda y condiciones por campo de formulario de los filtros: validación, guardado y evaluación |
 | `scp/workflows.php`, `include/staff/workflows.inc.php`, `include/staff/workflow.inc.php` | Administración de flujos y editor gráfico |
 | `scp/audit.php`, `include/staff/audit.inc.php` | Pantalla de auditoría |
 | `scp/reports.php`, `include/staff/reports.inc.php` | Pantalla de reportes |
 | `dashboard.php`, `include/client/dashboard.inc.php`, `include/client/dashboard-data.inc.php` | Dashboard del portal de clientes |
-| `include/upgrader/streams/streams.cfg` | Declara las líneas de actualización `core`, `workflow` y `audit` |
+| `include/upgrader/streams/streams.cfg` | Declara las líneas de actualización `core`, `workflow`, `audit` y `automation` |
 | `include/upgrader/streams/workflow.sig`, `include/upgrader/streams/workflow/*.patch.sql` | Actualización de base de datos de los flujos |
 | `include/upgrader/streams/audit.sig`, `include/upgrader/streams/audit/*.patch.sql` | Actualización de base de datos de la auditoría |
-| `setup/inc/streams/workflow/install-mysql.sql`, `setup/inc/streams/audit/install-mysql.sql` | Esquema para instalaciones nuevas |
+| `include/upgrader/streams/automation.sig`, `include/upgrader/streams/automation/*.patch.sql` | Actualización de base de datos de las automatizaciones |
+| `setup/inc/streams/workflow/install-mysql.sql`, `setup/inc/streams/audit/install-mysql.sql`, `setup/inc/streams/automation/install-mysql.sql` | Esquema para instalaciones nuevas |
 
 **Archivos de osTicket modificados:**
 
 | Archivo | Cambio |
 | --- | --- |
-| `include/class.ticket.php` | Entrada al flujo, derivación, SLA por etapa, reparto en equipos, modo fijo, ZIP de adjuntos |
+| `include/class.ticket.php` | Entrada al flujo, derivación, SLA por etapa, reparto en equipos, modo fijo, ZIP de adjuntos; pasa a los filtros los valores tipados de los formularios |
+| `include/class.filter.php` | Los filtros evalúan también el tema de ayuda y las condiciones por campo; mensaje cuando un filtro no tiene acciones |
 | `include/class.staff.php` | Vacaciones con fechas |
 | `include/class.team.php` | Modos de reparto, respaldo al líder, reintento |
 | `include/class.cron.php`, `scp/autocron.php` | Tareas de cron nuevas |
@@ -78,6 +82,7 @@ El código está en el repositorio [erwinvr/osticket](https://github.com/erwinvr
 | `include/class.upgrader.php` | **Corrección** para que la actualización funcione con varias líneas (ver sección 10) |
 | `include/class.schedule.php` | **Corrección** de la zona horaria de los horarios de SLA (ver sección 10) |
 | `scp/tickets.php`, `tickets.php` | Derivación, búsqueda y descarga ZIP |
+| `include/staff/filter.inc.php` | Tema de ayuda y bloque «Form field conditions» en la ficha del filtro |
 | `include/staff/*.inc.php`, `include/staff/templates/*.tmpl.php`, `include/client/*` | Pantallas |
 | `assets/default/css/theme.css` | Ícono del menú Dashboard del portal |
 
@@ -85,13 +90,14 @@ Los archivos `docker/`, `docker-compose.yml` y `docs/` son del entorno de desarr
 
 ### 3.2 Base de datos
 
-osTicket actualiza su base de datos con **líneas de actualización** (*streams*). Cada línea tiene una firma, guardada en `ost_config` (clave `schema_signature`), y una cadena de parches. Las mejoras usan dos líneas propias, separadas de la oficial (`core`), para no interferir con las futuras actualizaciones de osTicket.
+osTicket actualiza su base de datos con **líneas de actualización** (*streams*). Cada línea tiene una firma, guardada en `ost_config` (clave `schema_signature`), y una cadena de parches. Las mejoras usan tres líneas propias, separadas de la oficial (`core`), para no interferir con las futuras actualizaciones de osTicket.
 
 | Línea | Firma final | Contenido | Parches para instalaciones existentes |
 | --- | --- | --- | --- |
 | `core` | `5fb92bef17f3b603659e024c01cc7a59` | Esquema oficial de osTicket 1.18.4 | Sin cambios |
 | `workflow` | `9ecaaa6551e64f739f9d94f2f6dc05fa` | Flujos, etapas, derivaciones e historial | `d41d8cd9 → 5ec8959e` (crea las 6 tablas), `5ec8959e → 9ecaaa65` (agrega SLA y posición a las etapas) |
 | `audit` | `9965208d8bc515df98f9111eb885548c` | Registro de auditoría | `d41d8cd9 → 9965208d` (crea la tabla) |
+| `automation` | `c23c7f14cb412c2f64b45ad444fe4a38` | Tema de ayuda y condiciones por campo de los filtros | `d41d8cd9 → c23c7f14` (crea las 2 tablas) |
 
 `d41d8cd9` es la firma con la que osTicket identifica una línea que todavía no está instalada.
 
@@ -194,7 +200,31 @@ Los nombres de etapa se guardan también como texto para que el historial se con
 
 La pantalla de auditoría combina esta tabla con datos que osTicket ya guarda: `ost_thread_event` (eventos de tickets), `ost_thread_entry` (mensajes y notas), `ost_workflow_history` (cambios de etapa) y `ost_syslog` (registro del sistema).
 
-### 4.3 Datos en tablas existentes de osTicket
+### 4.3 Línea `automation`
+
+Amplía los filtros de tickets de osTicket (`ost_filter`) sin modificar sus tablas. Las reglas clásicas siguen en `ost_filter_rule` y las acciones en `ost_filter_action`.
+
+**`ost_filter_topic`** — tema de ayuda al que se limita un filtro. Un filtro sin fila aquí se aplica a todos los temas.
+
+| Columna | Tipo | Descripción |
+| --- | --- | --- |
+| `filter_id` | int unsigned, PK | Filtro (`ost_filter.id`) |
+| `topic_id` | int unsigned, índice | Tema de ayuda (`ost_help_topic.topic_id`) |
+
+**`ost_filter_condition`** — condiciones sobre campos de formulario.
+
+| Columna | Tipo | Descripción |
+| --- | --- | --- |
+| `id` | int unsigned, PK | Identificador |
+| `filter_id` | int unsigned, índice | Filtro (`ost_filter.id`) |
+| `field_id` | int unsigned | Campo de formulario (`ost_form_field.id`) |
+| `op` | varchar(16) | Condición: `equal`, `not_equal`, `contains`, `dn_contain`, `starts`, `ends`, `in`, `not_in`, `gt`, `lt`, `between`, `on`, `before`, `after`, `checked`, `unchecked` |
+| `value` | text (JSON) | Valor: texto, número, fecha `Y-m-d`, lista de claves de opción, o `[desde, hasta]` en `between` |
+| `sort` | int unsigned | Orden en la pantalla |
+
+Al eliminar un filtro desde la pantalla se borran también sus filas en las dos tablas.
+
+### 4.4 Datos en tablas existentes de osTicket
 
 Algunas funciones no necesitan tablas propias y guardan su configuración en estructuras que osTicket ya tiene:
 
@@ -206,7 +236,7 @@ Algunas funciones no necesitan tablas propias y guardan su configuración en est
 | | `member_order` | Orden de los miembros (lista JSON de ids) |
 | | `last_assigned` | Último agente que recibió un ticket (round robin) |
 | | `lead_fallback`, `retry_pending` | Respaldo al líder y reintento por cron (`0`/`1`) |
-| `ost_config`, namespaces `workflow` y `audit` | `schema_signature` | Firma de cada línea de actualización |
+| `ost_config`, namespaces `workflow`, `audit` y `automation` | `schema_signature` | Firma de cada línea de actualización |
 | `ost_queue_column` | — | Solo si un administrador crea la columna «Stage» desde la configuración de colas |
 
 ## 5. Instalación nueva
@@ -243,7 +273,7 @@ Para un servidor sin osTicket.
    chmod 0666 include/ost-config.php
    ```
 
-5. Abra `https://<servidor>/setup/` en el navegador y complete el asistente. El instalador crea las tablas de las tres líneas (`core`, `workflow` y `audit`) y registra sus firmas.
+5. Abra `https://<servidor>/setup/` en el navegador y complete el asistente. El instalador crea las tablas de las cuatro líneas (`core`, `workflow`, `audit` y `automation`) y registra sus firmas.
 6. Proteja la configuración y elimine el instalador:
 
    ```bash
@@ -291,6 +321,7 @@ Para un servidor que ya tiene osTicket 1.18 en uso. Durante el paso 4, osTicket 
       ... v1.18.4-workflow
       ... v1.18.4-workflow2
       ... v1.18.4-audit
+      ... v1.18.4-automation
       Yay! All finished!
       ```
 
@@ -335,9 +366,11 @@ El detalle de cada paso está en [manual-usuario.md](manual-usuario.md).
 -- Firmas: deben coincidir con la tabla de la sección 3.2
 SELECT namespace, value FROM ost_config WHERE `key` = 'schema_signature';
 
--- Tablas nuevas: 6 en la primera consulta y 1 en la segunda
+-- Tablas nuevas: 6 en la primera consulta y 1 en cada una de las demás
 SHOW TABLES LIKE 'ost\_%workflow%';
 SHOW TABLES LIKE 'ost\_audit\_log';
+SHOW TABLES LIKE 'ost\_filter\_topic';
+SHOW TABLES LIKE 'ost\_filter\_condition';
 
 -- Columnas agregadas a las etapas
 SHOW COLUMNS FROM ost_workflow_stage WHERE Field IN ('sla_id', 'pos_x', 'pos_y');
@@ -353,6 +386,7 @@ Desde la consola, `php manage.php upgrade` debe responder `No upgrade is pending
 | Admin Panel → Manage | Aparece **Workflows** |
 | Crear un ticket con un tema asignado a un flujo | El ticket muestra «Stage» con la etapa inicial y el recuadro **Workflow** |
 | Derivar el ticket como agente asignado | Cambia de departamento y equipo; queda en el historial de etapas |
+| Admin Panel → Manage → Filters → Add New Filter | Aparecen **Help Topic** y el bloque **Form field conditions**; al elegir un tema, la lista de campos muestra los de sus formularios |
 | Responder con dos adjuntos | Aparece «Download all (2 files, ZIP)» y el ZIP se descarga |
 | Pantalla Tickets | Aparece la barra de búsqueda con número, asunto, contenido y fechas |
 | Portal de clientes | Aparece **Dashboard** en el menú |
@@ -377,14 +411,26 @@ Si hay que volver atrás:
 2. **Con la base de datos hay dos opciones:**
     - **Restaurar el respaldo:** vuelve todo al estado previo, pero **se pierden los tickets y cambios hechos después de la actualización**.
     - **Conservar la base actual:** las tablas nuevas no molestan al código anterior, que las ignora. Los tickets y datos creados después de la actualización se conservan; solo se pierden las funciones nuevas.
+
+      **En este caso, antes del paso 1 desactive las automatizaciones** que combinan reglas clásicas con tema de ayuda o condiciones por campo. El código anterior ignora el tema y las condiciones, y aplicaría esos filtros solo por sus reglas clásicas, es decir, a más tickets de lo previsto. Las automatizaciones que solo tienen tema o condiciones dejan de aplicarse solas. Para listar las que hay que revisar:
+
+      ```sql
+      SELECT f.id, f.name FROM ost_filter f
+      WHERE f.isactive = 1
+        AND EXISTS (SELECT 1 FROM ost_filter_rule r WHERE r.filter_id = f.id)
+        AND (EXISTS (SELECT 1 FROM ost_filter_topic t WHERE t.filter_id = f.id)
+          OR EXISTS (SELECT 1 FROM ost_filter_condition c WHERE c.filter_id = f.id));
+      ```
+
 3. Reinicie PHP o vacíe APCu.
 
 Las tablas nuevas se pueden eliminar después, si se decide no volver a instalar las mejoras:
 
 ```sql
 DROP TABLE ost_workflow, ost_workflow_topic, ost_workflow_stage,
-    ost_workflow_transition, ost_ticket_workflow, ost_workflow_history, ost_audit_log;
-DELETE FROM ost_config WHERE namespace IN ('workflow', 'audit') AND `key` = 'schema_signature';
+    ost_workflow_transition, ost_ticket_workflow, ost_workflow_history, ost_audit_log,
+    ost_filter_topic, ost_filter_condition;
+DELETE FROM ost_config WHERE namespace IN ('workflow', 'audit', 'automation') AND `key` = 'schema_signature';
 ```
 
 ## 12. Mantenimiento

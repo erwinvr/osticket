@@ -1,6 +1,6 @@
 # Manual de usuario: vacaciones y reparto de tickets en osTicket
 
-Última actualización: 16/10/2026 · Versión editable: [Claude Docs](https://claude.ai/code/artifact/b84f4015-e847-43fc-afa2-7f66130196b8)
+Última actualización: 19/10/2026 · Versión editable: [Claude Docs](https://claude.ai/code/artifact/b84f4015-e847-43fc-afa2-7f66130196b8)
 
 ## 1. Antes de empezar
 
@@ -8,7 +8,7 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 
 **Para quién es:**
 
-- **Administradores:** configuran vacaciones, equipos y flujos, y revisan la auditoría (secciones 2, 3, 5 a 9, 12 y 13).
+- **Administradores:** configuran vacaciones, equipos y flujos, y revisan la auditoría y crean automatizaciones (secciones 2, 3, 5 a 9, 12, 13 y 18).
 - **Agentes:** consultan su propia vacación, ven qué tickets reciben, los derivan entre etapas, descargan adjuntos, buscan tickets y generan reportes (secciones 4, 8, 10, 11, 12, 14, 15 y 17).
 
 **Cómo entrar:**
@@ -37,7 +37,8 @@ Este manual explica, paso a paso, dos funciones nuevas de osTicket: programar la
 | Buscar tickets por número, asunto, contenido o fecha | [15. Buscar tickets](#15-buscar-tickets) |
 | Ver cuántos casos hay por tema y etapa, y cuántos vencieron el SLA | [16. Dashboard del portal](#16-dashboard-del-portal) |
 | Saber qué agente, tema de ayuda o etapa demora más, y exportarlo | [17. Reportes](#17-reportes) |
-| Entender un mensaje de error | [18. Preguntas frecuentes y solución de problemas](#18-preguntas-frecuentes-y-solución-de-problemas) |
+| Aplicar acciones automáticas según lo que el cliente llenó en el formulario | [18. Automatizaciones por campos de formulario](#18-automatizaciones-por-campos-de-formulario) |
+| Entender un mensaje de error | [19. Preguntas frecuentes y solución de problemas](#19-preguntas-frecuentes-y-solución-de-problemas) |
 
 La pantalla de osTicket está en inglés. Por eso este manual escribe los nombres de botones y campos tal como aparecen, por ejemplo **Vacation Mode**.
 
@@ -79,7 +80,7 @@ Si marca **Vacation Mode** y deja las dos fechas vacías, la vacación empieza a
 - La fecha de fin no puede estar en el pasado.
 - Inicio y fin pueden ser el mismo día, para una vacación de un solo día.
 
-Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 18).
+Si algo no cumple estas reglas, osTicket no guarda y muestra un mensaje en rojo junto a las fechas (vea la sección 19).
 
 **Importante:** el cambio de estado lo hace una tarea automática de osTicket que corre cada pocos minutos. Si la vacación no se activa el día indicado, avise al área técnica para que revise el cron.
 
@@ -584,7 +585,66 @@ En la tabla tema × etapa, cuanto más oscura la celda, más tiempo pasan los ti
 - Un ticket venció el SLA si se cerró después de su fecha de vencimiento, o si sigue abierto y ya la pasó.
 - El CSV incluye los acentos correctamente al abrirlo con Excel.
 
-## 18. Preguntas frecuentes y solución de problemas
+## 18. Automatizaciones por campos de formulario
+
+Una automatización es un filtro de tickets de osTicket que, además de sus reglas de siempre, revisa lo que el cliente llenó en los formularios del tema de ayuda. Si el ticket cumple las condiciones, osTicket aplica las acciones del filtro: cambiar la prioridad, asignar un equipo o un agente, mover de departamento, aplicar un SLA, responder con una respuesta predefinida, etc.
+
+Por ejemplo, en el tema **Report a Problem** con un formulario de equipos:
+
+- Si **Tipo de equipo** es *Laptop* y **Cantidad** es mayor que 5 → prioridad **Emergency**.
+- Si **En garantía** no está marcado → asignar al equipo **TI N2**.
+- Si **Fecha de compra** es anterior al 01/01/2025 → mover al departamento **Sales**.
+
+Cada automatización es un filtro aparte, así que puede crear tantas como necesite y se aplican todas las que se cumplan.
+
+**Quién puede crearlas:** los administradores.
+
+**Cuándo se aplican:** solo al crear el ticket, por cualquier canal (portal, correo, API o agente). Si después se editan los campos del ticket, no se vuelve a aplicar nada.
+
+> Las automatizaciones no tienen relación con los flujos y etapas (sección 9). Sí pueden convivir: si un tema tiene flujo, el ticket entra a su etapa inicial y la automatización aplica sus acciones igual.
+
+![Formulario de filtro con el tema Report a Problem y cuatro condiciones: tipo de equipo, cantidad entre 2 y 9, fecha de compra posterior al 01/01/2024 y en garantía marcado](img/automatizacion-form.png)
+
+### Pasos
+
+1. En el **Admin Panel**, vaya a **Manage → Filters** y haga clic en **Add New Filter**.
+2. Complete **Filter Name** (por ejemplo, *Laptops en cantidad*) y **Execution Order** (1 a 99; los números bajos se aplican primero).
+3. En **Filter Status**, elija **Active**.
+4. En **Help Topic**, elija el tema de ayuda. El filtro solo se aplicará a los tickets nuevos de ese tema. Si deja **All help topics**, se aplica a todos.
+5. En **Target Channel**, elija **Any** para que se aplique sin importar por dónde llegó el ticket.
+6. En la pestaña **Filter Rules**, en el bloque **Form field conditions**, haga clic en **Add Condition** y complete la fila:
+   1. Elija el campo. La lista muestra los campos de los formularios del tema elegido y de los formularios comunes a todos los tickets.
+   2. Elija la condición. Las opciones dependen del tipo de campo (vea la tabla de abajo).
+   3. Indique el valor.
+7. Repita el paso 6 para cada condición. Para quitar una, haga clic en **(clear)**.
+8. En **Rules Matching Criteria**, elija:
+   - **Match All**: se tienen que cumplir todas las condiciones.
+   - **Match Any**: basta con que se cumpla una.
+9. En la pestaña **Filter Actions**, elija en **Select an Action** lo que debe pasar (por ejemplo **Set Priority**) y complételo. Puede agregar varias acciones.
+10. Haga clic en **Add Filter**.
+
+Para cambiar una automatización, haga clic en su nombre en **Manage → Filters**, modifique lo que necesite y haga clic en **Save Changes**. Para pausarla sin borrarla, cambie **Filter Status** a **Disabled**.
+
+### Condiciones según el tipo de campo
+
+| Tipo de campo | Condiciones | Valor |
+| --- | --- | --- |
+| Texto corto, texto largo, teléfono | **Equal**, **Not Equal**, **Contains**, **Does Not Contain**, **Starts With**, **Ends With** | Un texto. No distingue mayúsculas de minúsculas |
+| Texto con validación de número | **Equal**, **Greater than**, **Less than**, **Between** | Un número; dos para **Between** (ambos incluidos) |
+| Fecha | **On**, **Before**, **After**, **Between** | Una fecha; dos para **Between** (ambas incluidas) |
+| Casilla de verificación | **Is checked**, **Is not checked** | No lleva valor |
+| Lista de opciones, lista personalizada, prioridad | **Is one of**, **Is not any of** | Marque una o varias opciones |
+
+### Bueno saber
+
+- **Combinar con las reglas de siempre:** el bloque **Form field conditions** está debajo de las reglas clásicas de osTicket (asunto, correo del cliente, etc.). Puede usar las dos; **Match All** o **Match Any** se aplica al conjunto.
+- **Solo con el tema:** una automatización con tema de ayuda y sin condiciones se aplica a todos los tickets nuevos de ese tema.
+- **Campos vacíos:** si el cliente dejó el campo vacío, la condición no se cumple, salvo **Not Equal**, **Does Not Contain**, **Is not any of** e **Is not checked**.
+- **Fechas:** se comparan solo por el día, en la zona horaria del helpdesk.
+- **Varias automatizaciones a la vez:** si dos cambian lo mismo (por ejemplo, la prioridad), queda la de **Execution Order** más alto, porque se aplica después. Para que una automatización detenga a las siguientes, marque **Stop processing further on match!**
+- **Si cambia un formulario:** si borra un campo, las condiciones que lo usaban dejan de cumplirse. Si borra una opción de una lista, revise las automatizaciones que la usaban.
+
+## 19. Preguntas frecuentes y solución de problemas
 
 ### Mensajes de error
 
@@ -611,7 +671,29 @@ En la tabla tema × etapa, cuanto más oscura la celda, más tiempo pasan los ti
 | This ticket follows a fixed workflow. Use Derive to move it to another stage. | Transferir un ticket | El flujo es fijo | Use **Derive** (sección 10) |
 | This ticket follows a fixed workflow and belongs to team … | Asignar un ticket a un equipo | El flujo es fijo | Asigne a un agente de ese equipo o derive el ticket |
 
+**Mensajes de las automatizaciones (Admin Panel → Manage → Filters):**
+
+| Mensaje en pantalla | Causa | Solución |
+| --- | --- | --- |
+| You must set at least one rule, condition or help topic. | El filtro no tiene reglas, condiciones ni tema de ayuda | Elija un tema o agregue una condición |
+| Add at least one action in the Filter Actions tab. | El filtro no tiene acciones | Agregue una en **Filter Actions** |
+| Select a form field / Select a condition | A una fila de condiciones le falta el campo o la condición | Complétela o quítela con **(clear)** |
+| Value required | Condición de texto sin valor | Escriba el texto |
+| Select at least one option | Condición de lista sin opciones marcadas | Marque al menos una |
+| Enter a number / Enter a valid date | El valor no es un número o una fecha válida | Corríjalo |
+| The second number must be greater than the first / The second date must be on or after the first | En **Between**, el rango está al revés | Invierta los valores |
+| Select a valid help topic | El tema de ayuda ya no existe | Elija otro |
+
 ### Preguntas frecuentes
+
+**Una automatización no se aplicó a un ticket.**
+
+Revise que el filtro esté en **Active**, que el ticket sea del tema elegido en **Help Topic** y que su canal coincida con **Target Channel**. Recuerde que solo se aplica al crear el ticket: si los campos se completaron o corrigieron después, no se aplica. También revise si una automatización anterior tiene marcado **Stop processing further on match!**
+
+**No encuentro un campo en la lista de condiciones.**
+
+Solo aparecen los campos de los formularios del tema elegido y de los formularios comunes. Revise en **Manage → Help Topics** que el formulario esté agregado al tema. Los campos de tipo adjunto, sección o texto informativo no se pueden usar en condiciones.
+
 
 **Un ticket llegó al equipo pero no se asignó a nadie. ¿Por qué?**
 
@@ -656,20 +738,21 @@ La nueva etapa pertenece a otro departamento al que usted no tiene acceso. Es lo
 
 El ticket se reabre y sigue en la etapa final, que no tiene derivaciones. Para continuar el recorrido, un administrador debe permitir derivaciones desde una etapa no final, o el ticket se gestiona fuera del flujo si este es libre.
 
-## 19. Historial de este manual
+## 20. Historial de este manual
 
 Este manual se actualiza cada vez que se agrega o cambia una función.
 
 | Fecha | Cambio |
 | --- | --- |
+| 19/10/2026 | Automatizaciones por campos de formulario de cada tema de ayuda (sección 18) |
 | 17/10/2026 | Reportes de tiempos por agente, tema de ayuda y etapa, con exportación a CSV (sección 17) |
 | 17/10/2026 | Dashboard del portal con casos por tema y etapa, vencimientos de SLA por etapa y actualización automática (sección 16) |
 | 17/10/2026 | Nueva barra de búsqueda de tickets por número, asunto, contenido y fecha de creación (sección 15) |
 | 17/10/2026 | Descarga de todos los adjuntos de una respuesta en un ZIP (sección 14) |
 | 16/10/2026 | Editor gráfico de flujos y SLA por etapa (sección 9), etapa en colas y búsqueda (sección 12) y auditoría (sección 13) |
-| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 18) |
-| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 18) |
+| 16/10/2026 | Flujos de atención por etapas: diseño del flujo (sección 9), derivar tickets (sección 10), etapa visible para el cliente (sección 11) y sus mensajes y preguntas frecuentes (hoy sección 19) |
+| 16/10/2026 | Primera versión: vacaciones con fechas (secciones 2 a 4), reparto automático en equipos (secciones 5, 6 y 8), opciones para cuando nadie está disponible (sección 7) y preguntas frecuentes (hoy sección 19) |
 
 **Estado:** todas las funciones están probadas en el entorno de pruebas. Todas están guardadas en el repositorio, en la rama `feature/mejoras-osticket`. Ninguna está instalada aún en el sistema de producción.
 
-**Al instalar los flujos y la auditoría en producción:** osTicket mostrará que hay una actualización de base de datos pendiente. Un administrador debe completarla desde el panel (o el área técnica con `php manage.php upgrade`) antes de seguir usando el sistema.
+**Al instalar los flujos, la auditoría y las automatizaciones en producción:** osTicket mostrará que hay una actualización de base de datos pendiente. Un administrador debe completarla desde el panel (o el área técnica con `php manage.php upgrade`) antes de seguir usando el sistema.

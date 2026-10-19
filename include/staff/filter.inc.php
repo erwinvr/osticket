@@ -22,6 +22,28 @@ if($filter && $_REQUEST['a']!='add'){
     $qs += array('a' => $_REQUEST['a']);
 }
 $info=Format::htmlchars(($errors && $_POST)?$_POST:$info, true);
+
+// Automation: help topic and form-field conditions
+$autoCatalog = FilterAutomation::getCatalog();
+if ($errors && $_POST) {
+    $autoTopic = (int) ($_POST['auto_topic_id'] ?? 0);
+    $autoConds = FilterAutomation::posted($_POST);
+} else {
+    $autoTopic = ($filter && $filter->getId()) ? FilterAutomation::getTopicId($filter->getId()) : 0;
+    $autoConds = array();
+    if ($filter && $filter->getId()) {
+        foreach (FilterAutomation::getConditions($filter->getId()) as $c) {
+            $v = $c->getValue();
+            $between = is_array($v) && $c->op == 'between';
+            $autoConds[] = array('f' => (int) $c->field_id, 'op' => $c->op,
+                'v' => $between ? $v[0] : $v, 'v2' => $between ? $v[1] : null);
+        }
+    }
+}
+$autoErrors = array();
+foreach ((array) $errors as $k => $e)
+    if (strpos($k, 'cond_') === 0)
+        $autoErrors[(int) substr($k, 5)] = $e;
 ?>
 <form action="filters.php?<?php echo Http::build_query($qs); ?>" method="post" class="save">
     <?php csrf_token(); ?>
@@ -78,6 +100,21 @@ $info=Format::htmlchars(($errors && $_POST)?$_POST:$info, true);
                     <input type="radio" name="isactive" value="0" <?php echo !$info['isactive']?'checked="checked"':''; ?>
                     > <?php echo __('Disabled'); ?>
                     &nbsp;<span class="error">*&nbsp;</span>
+                </td>
+            </tr>
+            <tr>
+                <td width="180">
+                    <?php echo __('Help Topic');?>:
+                </td>
+                <td>
+                    <select name="auto_topic_id" id="auto-topic">
+                        <option value="0">&mdash; <?php echo __('All help topics');?> &mdash;</option>
+<?php               foreach (Topic::getHelpTopics(false, true) as $tid => $tname) { ?>
+                        <option value="<?php echo $tid; ?>" <?php echo $autoTopic == $tid ? 'selected="selected"' : ''; ?>><?php echo Format::htmlchars($tname); ?></option>
+<?php               } ?>
+                    </select>
+                    <span class="error">&nbsp;<?php echo $errors['auto_topic_id']; ?></span>
+                    <div class="faded"><em><?php echo __('With a help topic, the filter only applies to new tickets of that topic, and its form-field conditions can use the fields of that topic\'s forms.'); ?></em></div>
                 </td>
             </tr>
             <tr>
@@ -216,6 +253,20 @@ $info=Format::htmlchars(($errors && $_POST)?$_POST:$info, true);
         <div style="padding: 5px">
             <button class="green button" type="button" id="add-rule">
                 <i class="icon-plus-sign"></i> <?php echo __('Add Rule'); ?>
+            </button>
+        </div>
+        <table class="form_table" width="940" border="0" cellspacing="0" cellpadding="2" style="margin-top:14px">
+            <thead>
+                <tr><th style="text-align:left;">
+                    <em><strong><?php echo __('Form field conditions'); ?></strong>: <?php
+                    echo __('Conditions on the fields of the ticket forms, by field type. They are combined with the rules above using the "All" / "Any" option.'); ?></em>
+                </th></tr>
+            </thead>
+            <tbody id="auto-conds"></tbody>
+        </table>
+        <div style="padding: 5px">
+            <button class="green button" type="button" id="add-cond">
+                <i class="icon-plus-sign"></i> <?php echo __('Add Condition'); ?>
             </button>
         </div>
     </div>
@@ -374,4 +425,115 @@ $info=Format::htmlchars(($errors && $_POST)?$_POST:$info, true);
         $('#add-rule').trigger('click').trigger('click');
 <?php } ?>
    });
+</script>
+
+<script type="text/javascript">
+$(function() {
+    var catalog = <?php echo JsonDataEncoder::encode($autoCatalog); ?>;
+    var ops = <?php echo JsonDataEncoder::encode(FilterAutomation::getOperators()); ?>;
+    var initial = <?php echo JsonDataEncoder::encode(array_values($autoConds)); ?>;
+    var errors = <?php echo JsonDataEncoder::encode((object) $autoErrors); ?>;
+    var L = <?php echo JsonDataEncoder::encode(array(
+        'field' => __('Select a field'), 'cond' => __('Condition'), 'and' => __('and'),
+        'remove' => __('clear'), 'general' => __('All help topics'))); ?>;
+    var n = 0;
+    var esc = function(t) { return $('<div>').text(t == null ? '' : String(t)).html(); };
+
+    // Forms usable with the selected help topic: the ticket form + the topic's forms
+    var forms = function() {
+        var tid = $('#auto-topic').val(), ids = (catalog.topics || {})[tid] || [];
+        var out = [];
+        $.each(catalog.forms, function(fid, form) {
+            if (tid == '0' || form.general || ids.indexOf(+fid) >= 0) out.push([fid, form]);
+        });
+        return out;
+    };
+    var fieldOf = function(id) {
+        var f = null;
+        $.each(catalog.forms, function(_, form) { if (form.fields[id]) f = form.fields[id]; });
+        return f;
+    };
+    var fieldSelect = function(i, sel) {
+        var h = '<select name="conds[' + i + '][f]" class="c-field" style="max-width:260px"><option value="">— ' + esc(L.field) + ' —</option>';
+        forms().forEach(function(p) {
+            h += '<optgroup label="' + esc(p[1].title) + '">';
+            $.each(p[1].fields, function(id, f) {
+                h += '<option value="' + id + '"' + (id == sel ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+            });
+            h += '</optgroup>';
+        });
+        return h + '</select>';
+    };
+    var valueWidget = function(i, f, op, v, v2) {
+        if (!f) return '';
+        var nm = 'conds[' + i + ']';
+        switch (f.type) {
+        case 'bool': return '';
+        case 'choice':
+            var sel = (v || []).map(String), h = '';
+            $.each(f.choices, function(k, label) {
+                h += '<label style="display:inline-block;margin-right:12px"><input type="checkbox" name="' + nm + '[v][]" value="' + esc(k) + '"'
+                    + (sel.indexOf(String(k)) >= 0 ? ' checked' : '') + '> ' + esc(label) + '</label>';
+            });
+            return h;
+        case 'number':
+        case 'date':
+            var t = f.type == 'date' ? 'date' : 'number';
+            var h = '<input type="' + t + '" step="any" name="' + nm + '[v]" value="' + esc(v) + '">';
+            if (op == 'between')
+                h += ' ' + esc(L.and) + ' <input type="' + t + '" step="any" name="' + nm + '[v2]" value="' + esc(v2) + '">';
+            return h;
+        default:
+            return '<input type="text" size="40" name="' + nm + '[v]" value="' + esc(v) + '">';
+        }
+    };
+    var opSelect = function(i, f, sel) {
+        if (!f) return '';
+        var h = '<select name="conds[' + i + '][op]" class="c-op">';
+        $.each(ops[f.type], function(k, label) {
+            h += '<option value="' + k + '"' + (k == sel ? ' selected' : '') + '>' + esc(label) + '</option>';
+        });
+        return h + '</select>';
+    };
+    var render = function(tr, c) {
+        var i = tr.data('i'), f = fieldOf(c.f);
+        if (f && !ops[f.type][c.op]) c.op = Object.keys(ops[f.type])[0];
+        tr.find('td').html(fieldSelect(i, f ? c.f : '') + ' <span class="c-opbox">' + opSelect(i, f, c.op)
+            + '</span> <span class="c-val">' + valueWidget(i, f, c.op, c.v, c.v2) + '</span>'
+            + ' <a href="#" class="c-del">(' + esc(L.remove) + ')</a>'
+            + (errors[i] ? '<div class="error">' + esc(errors[i]) + '</div>' : ''));
+    };
+    var add = function(c) {
+        var tr = $('<tr><td></td></tr>').data('i', n++).appendTo('#auto-conds');
+        render(tr, c || {});
+    };
+    // Current values of a row, to keep them while re-rendering
+    var read = function(tr) {
+        var c = {f: tr.find('.c-field').val(), op: tr.find('.c-op').val(),
+                 v: tr.find('[name$="[v]"]').val(), v2: tr.find('[name$="[v2]"]').val()};
+        var boxes = tr.find('input[type=checkbox]:checked');
+        if (boxes.length) c.v = boxes.map(function() { return this.value; }).get();
+        return c;
+    };
+    $('#auto-conds').on('change', '.c-field', function() {
+        var tr = $(this).closest('tr');
+        render(tr, {f: $(this).val()});
+    }).on('change', '.c-op', function() {
+        var tr = $(this).closest('tr');
+        render(tr, read(tr));
+    }).on('click', '.c-del', function() {
+        $(this).closest('tr').remove();
+        return false;
+    });
+    // A new topic changes the fields available
+    $('#auto-topic').on('change', function() {
+        $('#auto-conds tr').each(function() {
+            var tr = $(this), c = read(tr), ok = false;
+            forms().forEach(function(p) { if (p[1].fields[c.f]) ok = true; });
+            render(tr, ok ? c : {});
+        });
+    });
+    $('#add-cond').on('click', function() { add(); return false; });
+    initial.forEach(function(c) { add(c); });
+});
 </script>

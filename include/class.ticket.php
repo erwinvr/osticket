@@ -4271,9 +4271,14 @@ implements RestrictedAccess, Threadable, Searchable {
             if (strpos($k, 'field.') === 0)
                 unset($vars[$k]);
 
+        unset($vars['__raw']);
         foreach ($forms as $F) {
             if ($F) {
                 $vars += $F->getFilterData();
+                // Typed values for the automation conditions
+                foreach ($F->getFields() as $field)
+                    if ($field->get('id'))
+                        $vars['__raw'][$field->get('id')] = $field->getClean();
             }
         }
 

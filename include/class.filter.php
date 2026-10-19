@@ -14,6 +14,7 @@
     vim: expandtab sw=4 ts=4 sts=4:
 **********************************************************************/
 
+require_once(INCLUDE_DIR.'class.automation.php');
 require_once INCLUDE_DIR . 'class.filter_action.php';
 
 class Filter
@@ -298,32 +299,35 @@ extends VerySimpleModel {
             'not_match' => array('pregMatchB', null, 1),
         );
 
-        $match = false;
         # Respect configured filter email-id
         if ($this->getEmailId()
                 && !strcasecmp($this->getTarget(), 'Email')
                 && $this->getEmailId() != $what['emailId'])
             return false;
 
+        // Automation: the help topic it applies to (if any) must match;
+        // its form-field conditions count as rules
+        $auto = FilterAutomation::evaluate($this->getId(), $what);
+        if ($auto['topic'] === false)
+            return false;
+
+        $results = array();
         foreach ($this->getRules() as $rule) {
             if (!isset($how[$rule['h']])) continue;
             list($func, $pos, $neg) = $how[$rule['h']];
 
             $result = call_user_func($func, $what[$rule['w']], $rule['v']);
-            if (($pos === null && $result !== $neg) or ($result === $pos)) {
-                # Match.
-                $match = true;
-                if (!$this->matchAllRules()) break;
-            } else {
-                # No match. Continue?
-                if ($this->matchAllRules()) {
-                    $match = false;
-                    break;
-                }
-            }
+            $results[] = ($pos === null && $result !== $neg) || ($result === $pos);
         }
+        $results = array_merge($results, $auto['results']);
 
-        return $match;
+        // Only a help topic: every ticket of that topic
+        if (!$results)
+            return $auto['topic'] === true;
+
+        return $this->matchAllRules()
+            ? !in_array(false, $results, true)
+            : in_array(true, $results, true);
     }
 
     function getActions() {
@@ -405,8 +409,11 @@ extends VerySimpleModel {
         elseif(($filter=static::getByName($vars['name'])) && $filter->id!=$this->id)
             $errors['name'] = __('Name already in use');
 
-        if(!$errors && !$this->validate_rules($vars,$errors) && !$errors['rules'])
+        if(!$errors && !$this->validate_rules($vars,$errors) && !$errors['rules']
+                && !FilterAutomation::hasCriteria($vars))
             $errors['rules'] = __('Unable to validate rules as entered');
+
+        $automation = FilterAutomation::validate($vars, $errors);
 
         $targets = self::getTargets();
         if(!$vars['target'])
@@ -455,8 +462,10 @@ extends VerySimpleModel {
         //Success with update/create...save the rules. We can't recover from any errors at this point.
         # Don't care about errors stashed in $xerrors
         $xerrors = array();
-        if (!$this->save_rules($vars,$xerrors))
+        if ($this->save_rules($vars,$xerrors) === false)
             return false;
+
+        FilterAutomation::save($this, $vars, $automation ?: array());
 
         return true;
     }
@@ -468,6 +477,7 @@ extends VerySimpleModel {
             Signal::send('object.deleted', $this, $type);
             $this->rules->expunge();
             $this->actions->expunge();
+            FilterAutomation::delete($this->getId());
         }
         catch (OrmException $e) {
             return false;
@@ -533,8 +543,8 @@ extends VerySimpleModel {
             }
         }
 
-        if(!$rules && !$errors)
-            $errors['rules']=__('You must set at least one rule.');
+        if(!$rules && !$errors && !FilterAutomation::hasCriteria($vars))
+            $errors['rules']=__('You must set at least one rule, condition or help topic.');
 
         return $rules;
     }
@@ -584,8 +594,11 @@ extends VerySimpleModel {
         if ($vars['pass'])
             return true;
 
-        if (!is_array(@$vars['actions']))
-            return;
+        if (!is_array(@$vars['actions'])) {
+            // Without this message the save failed with no explanation
+            $errors['err'] = __('Add at least one action in the Filter Actions tab.');
+            return false;
+        }
         foreach ($vars['actions'] as $sort=>$v) {
           if (is_array($v)) {
               $info = $v['type'];
@@ -808,9 +821,12 @@ class TicketFilter {
         // emailId is always significant to the filter process
         $interest[] = 'emailId';
         foreach ($vars as $k=>$v) {
-            if (in_array($k, $interest))
+            if (in_array($k, $interest) && !is_array($v))
                 $this->vars[$k] = trim($v);
         }
+        // Typed values of the form fields (automation conditions)
+        $this->vars['__raw'] = $vars['__raw'] ?? array();
+        $this->vars['topicId'] = $vars['topicId'] ?? 0;
         if (isset($vars['recipients']) && $vars['recipients']) {
             foreach ($vars['recipients'] as $r) {
                 $this->vars['addressee'][] = $r['name'];
